@@ -1,4 +1,4 @@
-name: Package OptiFine Minecraft Folders
+name: Package OptiArk Minecraft Folders
 
 on:
   workflow_dispatch:
@@ -6,12 +6,12 @@ on:
       release_tag:
         description: 'Release tag name'
         required: true
-        default: 'optifine-packages-v1.0.0'
+        default: 'optiark-packages-v1.0.0'
         type: string
       release_name:
         description: 'Release name'
         required: true
-        default: 'OptiFine Minecraft Packages'
+        default: 'OptiArk Minecraft Packages'
         type: string
 
 jobs:
@@ -27,7 +27,7 @@ jobs:
     
     - name: Find and package minecraft folders
       run: |
-        # Find all directories that match the OptiFine pattern
+        # Find all directories that match the OptiArk pattern
         for dir in OptiArk.*; do
           if [ -d "$dir" ]; then
             echo "Processing directory: $dir"
@@ -71,16 +71,16 @@ jobs:
         draft: false
         prerelease: false
         body: |
-          ## OptiFine Minecraft Packages
+          ## OptiArk Minecraft Packages
           
-          This release contains packaged minecraft folders from various OptiFine versions:
+          This release contains packaged minecraft folders from various OptiArk versions:
           
-          Each zip file is named after its source OptiFine directory and contains the minecraft folder from that version.
+          Each zip file is named after its source OptiArk directory and contains the minecraft folder from that version.
           
           **Available packages:**
           $(ls packages/ | sed 's/^/- /')
           
-          Download the package for your desired OptiFine version.
+          Download the package for your desired OptiArk version.
     
     - name: Upload Release Assets
       run: |
