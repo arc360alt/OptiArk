@@ -1,0 +1,59 @@
+name: Create Release from Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run ID containing the artifacts'
+        required: true
+        type: string
+      release_tag:
+        description: 'Release tag name'
+        required: true
+        default: 'optiark-v1.0.0'
+        type: string
+      release_name:
+        description: 'Release name'
+        required: true
+        default: 'OptiArk Packages'
+        type: string
+      artifact_name:
+        description: 'Name of the artifact to download'
+        required: true
+        default: 'optiark-packages'
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ github.event.inputs.artifact_name }}
+        run-id: ${{ github.event.inputs.run_id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        path: packages/
+    
+    - name: Create release
+      run: |
+        # Install GitHub CLI if not available (it should be pre-installed)
+        # gh --version
+        
+        # Create release notes from manifest
+        if [ -f "packages/MANIFEST.md" ]; then
+          cp packages/MANIFEST.md release_notes.md
+        else
+          echo "# OptiArk Packages" > release_notes.md
+          echo "" >> release_notes.md
+          echo "This release contains OptiArk minecraft folder packages." >> release_notes.md
+        fi
+        
+        # Create the release
+        gh release create "${{ github.event.inputs.release_tag }}" \
+          --title "${{ github.event.inputs.release_name }}" \
+          --notes-file release_notes.md \
+          packages/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
