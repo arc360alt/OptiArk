@@ -1,0 +1,16 @@
+filename = 'silk-all-1.11.0.jar'
+name = 'Silk'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.2', '1.21.3', '1.21.4' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'dd67903f354b0e2925a1eb3da6bd3ff0c839b4c4539dc12bff91de4dd57192f078a5cdc92e162a1a9fc1e441208735cac76356a59354386ecfc43fd367a16002'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/aTaCgKLW/versions/7WFi2tUG/silk-all-1.11.0.jar'
+
+[update.modrinth]
+mod-id = 'aTaCgKLW'
+version = '7WFi2tUG'

@@ -1,0 +1,16 @@
+filename = 'veinminer-fabric-2.4.2.jar'
+name = 'Veinminer'
+side = 'both'
+x-prismlauncher-loaders = [ 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.2', '1.21.3', '1.21.4', '1.21.5' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '04a8a079b64017fc04e24f8f22ee8b6fe46ce9c78ecedfb25fac99d4cfe78761901948fbc8eda9770cce944ecf93c9bafe793b7edb34b0c9e7e18322ae5392cc'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/OhduvhIc/versions/VDHlG2JK/veinminer-fabric-2.4.2.jar'
+
+[update.modrinth]
+mod-id = 'OhduvhIc'
+version = 'VDHlG2JK'

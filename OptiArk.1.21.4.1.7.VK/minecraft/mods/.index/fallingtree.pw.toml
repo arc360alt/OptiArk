@@ -1,0 +1,16 @@
+filename = 'FallingTree-1.21.4-1.21.4.12.jar'
+name = 'FallingTree'
+side = 'server'
+x-prismlauncher-loaders = [ 'neoforge', 'forge', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.4' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '30ca9817c241c203ff88e866d032066d2e2a39ffa7e927bae9b1be59084be1400143f2f0c3532adf2106237bbaef12219f0b3b3d48901a68fee0ba399277ba79'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/Fb4jn8m6/versions/qru1F4oW/FallingTree-1.21.4-1.21.4.12.jar'
+
+[update.modrinth]
+mod-id = 'Fb4jn8m6'
+version = 'qru1F4oW'

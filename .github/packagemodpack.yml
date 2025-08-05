@@ -1,0 +1,118 @@
+name: Package OptiFine Minecraft Folders
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag name'
+        required: true
+        default: 'optifine-packages-v1.0.0'
+        type: string
+      release_name:
+        description: 'Release name'
+        required: true
+        default: 'OptiFine Minecraft Packages'
+        type: string
+
+jobs:
+  package-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Create packages directory
+      run: mkdir -p packages
+    
+    - name: Find and package minecraft folders
+      run: |
+        # Find all directories that match the OptiFine pattern
+        for dir in OptiArk.*; do
+          if [ -d "$dir" ]; then
+            echo "Processing directory: $dir"
+            
+            # Check if minecraft folder exists in this directory
+            if [ -d "$dir/minecraft" ]; then
+              echo "Found minecraft folder in $dir"
+              
+              # Create zip file named after the parent directory
+              cd "$dir"
+              zip -r "../packages/${dir}.zip" minecraft/
+              cd ..
+              
+              echo "Created ${dir}.zip"
+            else
+              echo "No minecraft folder found in $dir"
+            fi
+          fi
+        done
+    
+    - name: List created packages
+      run: |
+        echo "Created packages:"
+        ls -la packages/
+    
+    - name: Check if packages were created
+      run: |
+        if [ -z "$(ls -A packages/)" ]; then
+          echo "No packages were created. Exiting."
+          exit 1
+        fi
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        release_name: ${{ github.event.inputs.release_name }}
+        draft: false
+        prerelease: false
+        body: |
+          ## OptiFine Minecraft Packages
+          
+          This release contains packaged minecraft folders from various OptiFine versions:
+          
+          Each zip file is named after its source OptiFine directory and contains the minecraft folder from that version.
+          
+          **Available packages:**
+          $(ls packages/ | sed 's/^/- /')
+          
+          Download the package for your desired OptiFine version.
+    
+    - name: Upload Release Assets
+      run: |
+        # Get the upload URL from the release
+        upload_url=$(echo '${{ steps.create_release.outputs.upload_url }}' | sed 's/{?name,label}//')
+        
+        # Upload each zip file
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            echo "Uploading $filename..."
+            
+            curl \
+              -X POST \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/zip" \
+              --data-binary @"$zip_file" \
+              "${upload_url}?name=${filename}&label=${filename}"
+          fi
+        done
+    
+    - name: Summary
+      run: |
+        echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "Successfully created release: ${{ github.event.inputs.release_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "Release tag: ${{ github.event.inputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Packaged Files:" >> $GITHUB_STEP_SUMMARY
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            size=$(du -h "$zip_file" | cut -f1)
+            echo "- $filename ($size)" >> $GITHUB_STEP_SUMMARY
+          fi
+        done

@@ -1,0 +1,16 @@
+filename = 'vmp-fabric-mc1.21.5-0.2.0+beta.7.198-all.jar'
+name = 'Very Many Players (Fabric)'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.5' ]
+x-prismlauncher-release-type = 'alpha'
+
+[download]
+hash = 'f6be6fcf949243bcca460acc113f799cb657ce81320c8f6fa4054e584d32512c538d30b5c6f6713f247fbb6122f4ab951a91c2a6c839e4680e196c707e1d4ffd'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/wnEe9KBa/versions/EKg6v67t/vmp-fabric-mc1.21.5-0.2.0%2Bbeta.7.198-all.jar'
+
+[update.modrinth]
+mod-id = 'wnEe9KBa'
+version = 'EKg6v67t'

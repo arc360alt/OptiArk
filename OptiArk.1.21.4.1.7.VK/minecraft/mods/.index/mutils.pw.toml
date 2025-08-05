@@ -1,0 +1,16 @@
+filename = 'ModpackUtils-1.2.0+fabric.1.21.4.jar'
+name = 'ModpackUtils'
+side = 'client'
+x-prismlauncher-loaders = [ 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21', '1.21.1', '1.21.2', '1.21.3', '1.21.4' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '3d3192d7760a83a4e8385974691a484e4f1488e2e810f358196e3050dc85a561d3310b7f06e51c2d89a754a184d374f37dba515b2f56283c92c453321efe0577'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/wklFEiuR/versions/lJWGX7ZD/ModpackUtils-1.2.0%2Bfabric.1.21.4.jar'
+
+[update.modrinth]
+mod-id = 'wklFEiuR'
+version = 'lJWGX7ZD'
