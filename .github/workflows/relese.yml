@@ -1,59 +1,156 @@
-name: Create Release from Artifacts
+name: Package OptiArk Minecraft Folders
 
 on:
   workflow_dispatch:
     inputs:
-      run_id:
-        description: 'Workflow run ID containing the artifacts'
-        required: true
-        type: string
+      create_release:
+        description: 'Try to create release (may fail due to permissions)'
+        required: false
+        default: false
+        type: boolean
       release_tag:
-        description: 'Release tag name'
-        required: true
+        description: 'Release tag (only used if create_release is true)'
+        required: false
         default: 'optiark-v1.0.0'
         type: string
       release_name:
-        description: 'Release name'
-        required: true
+        description: 'Release name (only used if create_release is true)'
+        required: false
         default: 'OptiArk Packages'
-        type: string
-      artifact_name:
-        description: 'Name of the artifact to download'
-        required: true
-        default: 'optiark-packages'
         type: string
 
 jobs:
-  create-release:
+  package-folders:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Download artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: ${{ github.event.inputs.artifact_name }}
-        run-id: ${{ github.event.inputs.run_id }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        path: packages/
+    - name: Checkout repository
+      uses: actions/checkout@v4
     
-    - name: Create release
+    - name: Create packages directory
+      run: mkdir -p packages
+    
+    - name: Find and package minecraft folders
       run: |
-        # Install GitHub CLI if not available (it should be pre-installed)
-        # gh --version
+        # Find all directories that match the OptiArk pattern
+        for dir in OptiArk.*; do
+          if [ -d "$dir" ]; then
+            echo "Processing directory: $dir"
+            
+            # Check if minecraft folder exists in this directory
+            if [ -d "$dir/minecraft" ]; then
+              echo "Found minecraft folder in $dir"
+              
+              # Create zip file named after the parent directory
+              cd "$dir"
+              zip -r "../packages/${dir}.zip" minecraft/
+              cd ..
+              
+              echo "Created ${dir}.zip"
+            else
+              echo "No minecraft folder found in $dir"
+            fi
+          fi
+        done
+    
+    - name: List created packages
+      run: |
+        echo "Created packages:"
+        ls -la packages/
         
-        # Create release notes from manifest
-        if [ -f "packages/MANIFEST.md" ]; then
-          cp packages/MANIFEST.md release_notes.md
-        else
-          echo "# OptiArk Packages" > release_notes.md
-          echo "" >> release_notes.md
-          echo "This release contains OptiArk minecraft folder packages." >> release_notes.md
+        # Create a manifest file with package info
+        echo "# OptiArk Packages" > packages/README.md
+        echo "" >> packages/README.md
+        echo "Generated on: $(date)" >> packages/README.md
+        echo "Commit: ${{ github.sha }}" >> packages/README.md
+        echo "" >> packages/README.md
+        echo "## Available Packages:" >> packages/README.md
+        
+        total_size=0
+        package_count=0
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+            size_mb=$((size / 1024 / 1024))
+            total_size=$((total_size + size))
+            package_count=$((package_count + 1))
+            echo "- **$filename** (${size_mb}MB)" >> packages/README.md
+          fi
+        done
+        
+        total_mb=$((total_size / 1024 / 1024))
+        echo "" >> packages/README.md
+        echo "**Total packages:** $package_count" >> packages/README.md
+        echo "**Total size:** ${total_mb}MB" >> packages/README.md
+        echo "" >> packages/README.md
+        echo "Each package contains the minecraft folder from the corresponding OptiArk version." >> packages/README.md
+    
+    - name: Check if packages were created
+      run: |
+        if [ -z "$(ls -A packages/*.zip 2>/dev/null)" ]; then
+          echo "❌ No packages were created. No minecraft folders found in OptiArk directories."
+          exit 1
         fi
+        echo "✅ Successfully created $(ls packages/*.zip | wc -l) packages"
+    
+    - name: Upload packages as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: optiark-packages-${{ github.run_number }}
+        path: packages/
+        retention-days: 30
+        compression-level: 0
+    
+    - name: Try to create release (if enabled)
+      if: ${{ github.event.inputs.create_release == 'true' }}
+      continue-on-error: true
+      run: |
+        echo "🚀 Attempting to create release..."
         
-        # Create the release
         gh release create "${{ github.event.inputs.release_tag }}" \
           --title "${{ github.event.inputs.release_name }}" \
-          --notes-file release_notes.md \
-          packages/*.zip
+          --notes-file packages/README.md \
+          packages/*.zip || {
+            echo "❌ Release creation failed (likely due to permissions)"
+            echo "📦 Packages are still available as artifacts!"
+            exit 0
+          }
+        
+        echo "✅ Release created successfully!"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Create summary
+      run: |
+        echo "## 📦 OptiArk Packages Ready!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        package_count=$(ls packages/*.zip 2>/dev/null | wc -l || echo "0")
+        echo "✅ **$package_count packages created**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### 📋 Package List:" >> $GITHUB_STEP_SUMMARY
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+            size_mb=$((size / 1024 / 1024))
+            echo "- \`$filename\` (${size_mb}MB)" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 How to Download:" >> $GITHUB_STEP_SUMMARY
+        echo "1. **Artifact**: Scroll down to find \`optiark-packages-${{ github.run_number }}\` in the artifacts section" >> $GITHUB_STEP_SUMMARY
+        echo "2. **Direct Download**: Click the artifact to download all packages as a zip" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+          echo "### 🎯 Release Status:" >> $GITHUB_STEP_SUMMARY
+          echo "Attempted to create release: \`${{ github.event.inputs.release_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above to see if it succeeded!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### 💡 Create Release Later:" >> $GITHUB_STEP_SUMMARY
+          echo "To create a release later, re-run this workflow with 'Try to create release' enabled" >> $GITHUB_STEP_SUMMARY
+        fi
