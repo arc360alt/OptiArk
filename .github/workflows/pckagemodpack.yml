@@ -46,7 +46,18 @@ jobs:
               
               # Create zip file named after the parent directory
               cd "$dir"
+              
+              # Add minecraft folder to zip
               zip -r "../packages/${dir}.zip" minecraft/
+              
+              # Add instance.cfg if it exists
+              if [ -f "instance.cfg" ]; then
+                echo "✅ Adding instance.cfg to ${dir}.zip"
+                zip -u "../packages/${dir}.zip" instance.cfg
+              else
+                echo "⚠️  No instance.cfg found in $dir"
+              fi
+              
               cd ..
               
               # Verify the zip was created
@@ -112,10 +123,10 @@ jobs:
         echo "## 🚀 Installation:" >> release_notes.md
         echo "1. Download the package for your desired OptiArk version" >> release_notes.md
         echo "2. Extract the zip file" >> release_notes.md
-        echo "3. Use the minecraft folder contents as needed" >> release_notes.md
+        echo "3. Use the minecraft folder contents and instance.cfg as needed" >> release_notes.md
         echo "" >> release_notes.md
         echo "---" >> release_notes.md
-        echo "*Each package contains the minecraft folder from the corresponding OptiArk version.*" >> release_notes.md
+        echo "*Each package contains the minecraft folder and instance.cfg (if available) from the corresponding OptiArk version.*" >> release_notes.md
         
         echo "📋 Release notes preview:"
         cat release_notes.md
