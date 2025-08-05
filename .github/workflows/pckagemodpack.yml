@@ -60,47 +60,32 @@ jobs:
           exit 1
         fi
     
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: Create Release with Assets
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.event.inputs.release_tag }}
-        release_name: ${{ github.event.inputs.release_name }}
-        draft: false
-        prerelease: false
-        body: |
-          ## OptiArk Minecraft Packages
-          
-          This release contains packaged minecraft folders from various OptiArk versions:
-          
-          Each zip file is named after its source OptiArk directory and contains the minecraft folder from that version.
-          
-          **Available packages:**
-          $(ls packages/ | sed 's/^/- /')
-          
-          Download the package for your desired OptiArk version.
-    
-    - name: Upload Release Assets
       run: |
-        # Get the upload URL from the release
-        upload_url=$(echo '${{ steps.create_release.outputs.upload_url }}' | sed 's/{?name,label}//')
-        
-        # Upload each zip file
+        # Create release notes
+        echo "## OptiArk Minecraft Packages" > release_notes.md
+        echo "" >> release_notes.md
+        echo "This release contains packaged minecraft folders from various OptiArk versions." >> release_notes.md
+        echo "" >> release_notes.md
+        echo "Each zip file is named after its source OptiArk directory and contains the minecraft folder from that version." >> release_notes.md
+        echo "" >> release_notes.md
+        echo "**Available packages:**" >> release_notes.md
         for zip_file in packages/*.zip; do
           if [ -f "$zip_file" ]; then
             filename=$(basename "$zip_file")
-            echo "Uploading $filename..."
-            
-            curl \
-              -X POST \
-              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Content-Type: application/zip" \
-              --data-binary @"$zip_file" \
-              "${upload_url}?name=${filename}&label=${filename}"
+            echo "- $filename" >> release_notes.md
           fi
         done
+        echo "" >> release_notes.md
+        echo "Download the package for your desired OptiArk version." >> release_notes.md
+        
+        # Create release with all zip files
+        gh release create "${{ github.event.inputs.release_tag }}" \
+          --title "${{ github.event.inputs.release_name }}" \
+          --notes-file release_notes.md \
+          packages/*.zip
     
     - name: Summary
       run: |
