@@ -3,19 +3,14 @@ name: Package OptiArk Minecraft Folders
 on:
   workflow_dispatch:
     inputs:
-      release_tag:
-        description: 'Release tag name'
+      artifact_name:
+        description: 'Artifact name for the packages'
         required: true
-        default: 'optiark-packages-v1.0.0'
-        type: string
-      release_name:
-        description: 'Release name'
-        required: true
-        default: 'OptiArk Minecraft Packages'
+        default: 'optiark-packages'
         type: string
 
 jobs:
-  package-and-release:
+  package-folders:
     runs-on: ubuntu-latest
     
     steps:
@@ -52,52 +47,64 @@ jobs:
       run: |
         echo "Created packages:"
         ls -la packages/
+        
+        # Create a manifest file with package info
+        echo "# OptiArk Packages Manifest" > packages/MANIFEST.md
+        echo "" >> packages/MANIFEST.md
+        echo "Generated on: $(date)" >> packages/MANIFEST.md
+        echo "Workflow run: ${{ github.run_id }}" >> packages/MANIFEST.md
+        echo "" >> packages/MANIFEST.md
+        echo "## Available Packages:" >> packages/MANIFEST.md
+        
+        total_size=0
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+            size_mb=$((size / 1024 / 1024))
+            total_size=$((total_size + size))
+            echo "- **$filename** (${size_mb}MB)" >> packages/MANIFEST.md
+          fi
+        done
+        
+        total_mb=$((total_size / 1024 / 1024))
+        echo "" >> packages/MANIFEST.md
+        echo "**Total size:** ${total_mb}MB" >> packages/MANIFEST.md
     
     - name: Check if packages were created
       run: |
-        if [ -z "$(ls -A packages/)" ]; then
+        if [ -z "$(ls -A packages/*.zip 2>/dev/null)" ]; then
           echo "No packages were created. Exiting."
           exit 1
         fi
     
-    - name: Create Release with Assets
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Create release notes
-        echo "## OptiArk Minecraft Packages" > release_notes.md
-        echo "" >> release_notes.md
-        echo "This release contains packaged minecraft folders from various OptiArk versions." >> release_notes.md
-        echo "" >> release_notes.md
-        echo "Each zip file is named after its source OptiArk directory and contains the minecraft folder from that version." >> release_notes.md
-        echo "" >> release_notes.md
-        echo "**Available packages:**" >> release_notes.md
-        for zip_file in packages/*.zip; do
-          if [ -f "$zip_file" ]; then
-            filename=$(basename "$zip_file")
-            echo "- $filename" >> release_notes.md
-          fi
-        done
-        echo "" >> release_notes.md
-        echo "Download the package for your desired OptiArk version." >> release_notes.md
-        
-        # Create release with all zip files
-        gh release create "${{ github.event.inputs.release_tag }}" \
-          --title "${{ github.event.inputs.release_name }}" \
-          --notes-file release_notes.md \
-          packages/*.zip
+    - name: Upload packages as artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.event.inputs.artifact_name }}
+        path: packages/
+        retention-days: 30
+        compression-level: 0  # Don't compress since we already have zip files
     
-    - name: Summary
+    - name: Create release instructions
       run: |
-        echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-        echo "Successfully created release: ${{ github.event.inputs.release_name }}" >> $GITHUB_STEP_SUMMARY
-        echo "Release tag: ${{ github.event.inputs.release_tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "## 📦 Packages Ready!" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Packaged Files:" >> $GITHUB_STEP_SUMMARY
+        echo "Your OptiArk packages have been created and uploaded as artifacts." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### What's included:" >> $GITHUB_STEP_SUMMARY
         for zip_file in packages/*.zip; do
           if [ -f "$zip_file" ]; then
             filename=$(basename "$zip_file")
-            size=$(du -h "$zip_file" | cut -f1)
-            echo "- $filename ($size)" >> $GITHUB_STEP_SUMMARY
+            size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+            size_mb=$((size / 1024 / 1024))
+            echo "- \`$filename\` (${size_mb}MB)" >> $GITHUB_STEP_SUMMARY
           fi
         done
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Download the artifact from this workflow run" >> $GITHUB_STEP_SUMMARY
+        echo "2. Use a release bot or manually create a release" >> $GITHUB_STEP_SUMMARY
+        echo "3. Upload the zip files to the release" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Artifact name:** \`${{ github.event.inputs.artifact_name }}\`" >> $GITHUB_STEP_SUMMARY
