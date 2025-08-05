@@ -28,6 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
     - name: Download artifacts
       uses: actions/download-artifact@v4
       with:
@@ -36,24 +39,83 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
         path: packages/
     
+    - name: List downloaded files
+      run: |
+        echo "Downloaded files:"
+        ls -la packages/
+        find packages/ -name "*.zip" -type f
+    
     - name: Create release
       run: |
-        # Install GitHub CLI if not available (it should be pre-installed)
-        # gh --version
-        
-        # Create release notes from manifest
+        # Create release notes from manifest if it exists
         if [ -f "packages/MANIFEST.md" ]; then
+          echo "Using existing manifest for release notes"
           cp packages/MANIFEST.md release_notes.md
+        elif [ -f "packages/README.md" ]; then
+          echo "Using README for release notes"
+          cp packages/README.md release_notes.md
         else
+          echo "Creating default release notes"
           echo "# OptiArk Packages" > release_notes.md
           echo "" >> release_notes.md
           echo "This release contains OptiArk minecraft folder packages." >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## Available Packages:" >> release_notes.md
+          
+          # List all zip files
+          for zip_file in packages/*.zip; do
+            if [ -f "$zip_file" ]; then
+              filename=$(basename "$zip_file")
+              size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+              size_mb=$((size / 1024 / 1024))
+              echo "- **$filename** (${size_mb}MB)" >> release_notes.md
+            fi
+          done
+          
+          echo "" >> release_notes.md
+          echo "Each package contains the minecraft folder from the corresponding OptiArk version." >> release_notes.md
         fi
+        
+        # Check if we have any zip files
+        if ! ls packages/*.zip 1> /dev/null 2>&1; then
+          echo "❌ No zip files found in artifacts!"
+          echo "Available files:"
+          find packages/ -type f
+          exit 1
+        fi
+        
+        echo "📋 Release notes preview:"
+        cat release_notes.md
+        echo ""
+        echo "🚀 Creating release with files:"
+        ls -la packages/*.zip
         
         # Create the release
         gh release create "${{ github.event.inputs.release_tag }}" \
+          --repo "arc360alt/OptiArk" \
           --title "${{ github.event.inputs.release_name }}" \
           --notes-file release_notes.md \
           packages/*.zip
+        
+        echo "✅ Release created successfully!"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Release summary
+      run: |
+        echo "## 🎉 Release Created!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Release Tag:** \`${{ github.event.inputs.release_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "**Release Name:** ${{ github.event.inputs.release_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Uploaded Files:" >> $GITHUB_STEP_SUMMARY
+        for zip_file in packages/*.zip; do
+          if [ -f "$zip_file" ]; then
+            filename=$(basename "$zip_file")
+            size=$(stat -f%z "$zip_file" 2>/dev/null || stat -c%s "$zip_file" 2>/dev/null || echo "0")
+            size_mb=$((size / 1024 / 1024))
+            echo "- \`$filename\` (${size_mb}MB)" >> $GITHUB_STEP_SUMMARY
+          fi
+        done
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "🔗 **[View Release](https://github.com/arc360alt/OptiArk/releases/tag/${{ github.event.inputs.release_tag }})**" >> $GITHUB_STEP_SUMMARY
