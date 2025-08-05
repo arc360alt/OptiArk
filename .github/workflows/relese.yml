@@ -90,14 +90,18 @@ jobs:
         echo "🚀 Creating release with files:"
         ls -la packages/*.zip
         
-        # Create the release
-        gh release create "${{ github.event.inputs.release_tag }}" \
-          --repo "arc360alt/OptiArk" \
-          --title "${{ github.event.inputs.release_name }}" \
-          --notes-file release_notes.md \
-          packages/*.zip
-        
-        echo "✅ Release created successfully!"
+        # Create the release using softprops/action-gh-release
+        echo "🚀 Creating release using action..."
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ github.event.inputs.release_tag }}
+        name: ${{ github.event.inputs.release_name }}
+        body_path: release_notes.md
+        files: packages/*.zip
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
