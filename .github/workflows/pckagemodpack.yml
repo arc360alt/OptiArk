@@ -14,10 +14,18 @@ on:
         default: 'OptiArk Packages'
         type: string
       version_filter:
-        description: 'Version filter pattern (e.g., "1.21.4,1.21.7" or "1.20" or leave empty for all)'
+        description: 'Version filter patterns (e.g., "1.21.4,1.21.7" or "1.20" or leave empty for all)'
         required: false
         default: ''
         type: string
+      filter_mode:
+        description: 'Filter mode'
+        required: false
+        default: 'include'
+        type: choice
+        options:
+        - include
+        - exclude
       prerelease:
         description: 'Mark as pre-release'
         required: false
@@ -41,12 +49,15 @@ jobs:
         
         # Parse version filter
         version_filter="${{ github.event.inputs.version_filter }}"
+        filter_mode="${{ github.event.inputs.filter_mode }}"
         echo "📋 Version filter: '$version_filter'"
+        echo "🎯 Filter mode: $filter_mode"
         
         # Function to check if directory matches filter
         matches_filter() {
           local dir_name="$1"
           local filter="$2"
+          local mode="$3"
           
           # If no filter specified, include everything
           if [ -z "$filter" ]; then
@@ -56,19 +67,36 @@ jobs:
           # Convert comma-separated filters to array
           IFS=',' read -ra FILTERS <<< "$filter"
           
+          local pattern_matched=false
           for pattern in "${FILTERS[@]}"; do
             # Trim whitespace
             pattern=$(echo "$pattern" | xargs)
             
             # Check if directory name contains this pattern
             if [[ "$dir_name" == *"$pattern"* ]]; then
-              echo "✅ '$dir_name' matches filter pattern '$pattern'"
-              return 0
+              pattern_matched=true
+              break
             fi
           done
           
-          echo "❌ '$dir_name' does not match any filter patterns"
-          return 1
+          # Apply include/exclude logic
+          if [ "$mode" = "include" ]; then
+            if [ "$pattern_matched" = true ]; then
+              echo "✅ '$dir_name' matches INCLUDE filter"
+              return 0
+            else
+              echo "❌ '$dir_name' does not match INCLUDE filter"
+              return 1
+            fi
+          else  # exclude mode
+            if [ "$pattern_matched" = true ]; then
+              echo "❌ '$dir_name' matches EXCLUDE filter - skipping"
+              return 1
+            else
+              echo "✅ '$dir_name' does not match EXCLUDE filter - including"
+              return 0
+            fi
+          fi
         }
         
         # Find all directories that match the OptiArk pattern
@@ -79,8 +107,8 @@ jobs:
             echo "📁 Processing directory: $dir"
             
             # Check if this directory matches our version filter
-            if ! matches_filter "$dir" "$version_filter"; then
-              echo "⏭️  Skipping $dir (doesn't match filter)"
+            if ! matches_filter "$dir" "$version_filter" "$filter_mode"; then
+              echo "⏭️  Skipping $dir (filter: $filter_mode)"
               skipped_packages=$((skipped_packages + 1))
               continue
             fi
@@ -136,7 +164,7 @@ jobs:
         if [ $found_packages -eq 0 ]; then
           echo "❌ No packages were created!"
           if [ -n "$version_filter" ]; then
-            echo "💡 Try adjusting your version filter: '$version_filter'"
+            echo "💡 Try adjusting your version filter: '$filter_mode $version_filter'"
             echo "💡 Available directories:"
             ls -1d OptiArk.* 2>/dev/null || echo "   No OptiArk directories found"
           else
@@ -156,8 +184,9 @@ jobs:
         
         # Add filter info if used
         version_filter="${{ github.event.inputs.version_filter }}"
+        filter_mode="${{ github.event.inputs.filter_mode }}"
         if [ -n "$version_filter" ]; then
-          echo "Version filter: \`$version_filter\`" >> release_notes.md
+          echo "Filter: \`$filter_mode\` patterns \`$version_filter\`" >> release_notes.md
         fi
         
         echo "" >> release_notes.md
