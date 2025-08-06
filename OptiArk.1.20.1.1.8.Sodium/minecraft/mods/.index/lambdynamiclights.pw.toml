@@ -1,0 +1,16 @@
+filename = 'lambdynamiclights-4.1.4+1.20.1.jar'
+name = 'LambDynamicLights'
+side = 'client'
+x-prismlauncher-loaders = [ 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.20', '1.20.1' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'bcc479e8564dddb032e187e1eb169ff02575c2924c41a2572d8877dc3c1b063448aeefe8374432ec971a2868e73832af463411845e4c0d2f271e4e98e4631189'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/yBW8D80W/versions/evN5ygtI/lambdynamiclights-4.1.4%2B1.20.1.jar'
+
+[update.modrinth]
+mod-id = 'yBW8D80W'
+version = 'evN5ygtI'

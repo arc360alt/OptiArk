@@ -1,0 +1,17 @@
+{
+  "frameQueueSize": 5,
+  "videoMode": {
+    "width": 2560,
+    "height": 1440,
+    "bitDepth": 8,
+    "refreshRate": 120
+  },
+  "windowMode": 0,
+  "advCulling": 1,
+  "indirectDraw": true,
+  "uniqueOpaqueLayer": true,
+  "entityCulling": true,
+  "device": 0,
+  "ambientOcclusion": 0,
+  "backFaceCulling": true
+}

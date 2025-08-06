@@ -7,10 +7,10 @@
 	modpackName: "OptiArk",
 	modpackId: "optiark",
 	modpackHome: "https://arc360hub.com/OptiArk/index.html",
-	localVersion: "Version 1.6.0",
+	localVersion: "Version 1.8.0",
 	checkMcVersion: false,
 	loader: "fabric",
-	versionAPI: "https://arc360hub.com/OptiArk/index.html",
+	versionAPI: "https://arc360hub.com/OptiArk/optiarkapi/pack.txt",
 	changelogLink: "https://arc360hub.com/OptiArk/index.html",
 	versionType: [
 		"release",

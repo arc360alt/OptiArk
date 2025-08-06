@@ -1,0 +1,16 @@
+filename = 'VulkanMod_1.20.1-0.5.2.jar'
+name = 'VulkanMod'
+side = 'client'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.20', '1.20.1' ]
+x-prismlauncher-release-type = 'beta'
+
+[download]
+hash = '788907e12f7662a3025942e281660cd4dcdbbd4a950f8dfbbaec8da9a771a1cb431e4a481f63078f14d73dd0ebaa676fbe24cac22a422a5a7a4e49d70ffcc357'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/JYQhtZtO/versions/ZhvilXaM/VulkanMod_1.20.1-0.5.2.jar'
+
+[update.modrinth]
+mod-id = 'JYQhtZtO'
+version = 'ZhvilXaM'
