@@ -1,0 +1,7 @@
+type = last_world
+
+last_world {
+  is_server = false
+  world = C:/Users/arc/AppData/Roaming/PrismLauncher/instances/OptiArk.1.6.1.21.5NV.1.6.0/minecraft/saves/Test
+}
+
