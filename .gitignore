@@ -4,3 +4,4 @@ server-resource-packs
 logs
 .fabric
 cache
+usercache.json
