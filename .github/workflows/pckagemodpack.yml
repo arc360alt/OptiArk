@@ -13,6 +13,11 @@ on:
         required: true
         default: 'OptiArk Packages'
         type: string
+      version_filter:
+        description: 'Version filter pattern (e.g., "1.21.4,1.21.7" or "1.20" or leave empty for all)'
+        required: false
+        default: ''
+        type: string
       prerelease:
         description: 'Mark as pre-release'
         required: false
@@ -34,11 +39,51 @@ jobs:
       run: |
         echo "🔍 Scanning for OptiArk directories..."
         
+        # Parse version filter
+        version_filter="${{ github.event.inputs.version_filter }}"
+        echo "📋 Version filter: '$version_filter'"
+        
+        # Function to check if directory matches filter
+        matches_filter() {
+          local dir_name="$1"
+          local filter="$2"
+          
+          # If no filter specified, include everything
+          if [ -z "$filter" ]; then
+            return 0
+          fi
+          
+          # Convert comma-separated filters to array
+          IFS=',' read -ra FILTERS <<< "$filter"
+          
+          for pattern in "${FILTERS[@]}"; do
+            # Trim whitespace
+            pattern=$(echo "$pattern" | xargs)
+            
+            # Check if directory name contains this pattern
+            if [[ "$dir_name" == *"$pattern"* ]]; then
+              echo "✅ '$dir_name' matches filter pattern '$pattern'"
+              return 0
+            fi
+          done
+          
+          echo "❌ '$dir_name' does not match any filter patterns"
+          return 1
+        }
+        
         # Find all directories that match the OptiArk pattern
         found_packages=0
+        skipped_packages=0
         for dir in OptiArk.*; do
           if [ -d "$dir" ]; then
             echo "📁 Processing directory: $dir"
+            
+            # Check if this directory matches our version filter
+            if ! matches_filter "$dir" "$version_filter"; then
+              echo "⏭️  Skipping $dir (doesn't match filter)"
+              skipped_packages=$((skipped_packages + 1))
+              continue
+            fi
             
             # Check if minecraft folder exists in this directory
             if [ -d "$dir/minecraft" ]; then
@@ -79,14 +124,24 @@ jobs:
               fi
             else
               echo "⚠️  No minecraft folder found in $dir"
+              skipped_packages=$((skipped_packages + 1))
             fi
           fi
         done
         
+        echo ""
         echo "📦 Total packages created: $found_packages"
+        echo "⏭️  Total packages skipped: $skipped_packages"
         
         if [ $found_packages -eq 0 ]; then
-          echo "❌ No packages were created! Make sure you have OptiArk.* directories with minecraft folders."
+          echo "❌ No packages were created!"
+          if [ -n "$version_filter" ]; then
+            echo "💡 Try adjusting your version filter: '$version_filter'"
+            echo "💡 Available directories:"
+            ls -1d OptiArk.* 2>/dev/null || echo "   No OptiArk directories found"
+          else
+            echo "💡 Make sure you have OptiArk.* directories with minecraft folders."
+          fi
           exit 1
         fi
     
@@ -98,6 +153,13 @@ jobs:
         echo "" >> release_notes.md
         echo "Generated on: $(date)" >> release_notes.md
         echo "Commit: [\`${GITHUB_SHA:0:7}\`](https://github.com/arc360alt/OptiArk/commit/$GITHUB_SHA)" >> release_notes.md
+        
+        # Add filter info if used
+        version_filter="${{ github.event.inputs.version_filter }}"
+        if [ -n "$version_filter" ]; then
+          echo "Version filter: \`$version_filter\`" >> release_notes.md
+        fi
+        
         echo "" >> release_notes.md
         echo "## 📦 Available Packages:" >> release_notes.md
         echo "" >> release_notes.md
@@ -148,6 +210,7 @@ jobs:
         files: packages/*.zip
         draft: false
         prerelease: ${{ github.event.inputs.prerelease }}
+        make_latest: true
         token: ${{ secrets.PAT_TOKEN }}
     
     - name: Upload packages as backup artifacts
