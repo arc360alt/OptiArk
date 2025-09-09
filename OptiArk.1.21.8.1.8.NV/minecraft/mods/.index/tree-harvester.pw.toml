@@ -1,0 +1,16 @@
+filename = 'treeharvester-1.21.8-9.2.jar'
+name = 'Tree Harvester'
+side = 'both'
+x-prismlauncher-loaders = [ 'neoforge', 'forge', 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.8' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'e4fbb526ad1523ec835c323a3506a3c34e8b4ce89521ab6ff2f9c196cd151aa85bde4cbb61d1f8168ccd468c1469b5a057bd7f48bccdf3c259bc31ccd4d4147c'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/abooMhox/versions/LG3WQ1fx/treeharvester-1.21.8-9.2.jar'
+
+[update.modrinth]
+mod-id = 'abooMhox'
+version = 'LG3WQ1fx'
