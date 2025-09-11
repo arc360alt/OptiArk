@@ -78,9 +78,43 @@ jobs:
           # If version extraction fails, use a default
           if [ -z "$mc_version" ] || [ "$mc_version" = "$name" ]; then
             mc_version="1.20.1"
-            echo "⚠️ Could not extract version from $name, using default $mc_version"
+            echo "⚠️ Could not extract MC version from $name, using default $mc_version"
           else
             echo "✅ Detected Minecraft version $mc_version for $name"
+          fi
+          
+          # Try to detect Fabric Loader version from the extracted files
+          fabric_version=""
+          
+          # Look for fabric-loader in mods folder
+          if [ -d "$temp_dir/minecraft/mods" ]; then
+            fabric_jar=$(find "$temp_dir/minecraft/mods" -name "*fabric-loader*" -o -name "*fabricloader*" 2>/dev/null | head -1)
+            if [ -n "$fabric_jar" ]; then
+              # Try to extract version from filename
+              fabric_version=$(echo "$fabric_jar" | sed -n 's/.*fabric.*loader.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p')
+            fi
+          fi
+          
+          # Look in instance.cfg if it exists
+          if [ -z "$fabric_version" ] && [ -f "$temp_dir/instance.cfg" ]; then
+            fabric_version=$(grep -o 'fabric-loader-[0-9]\+\.[0-9]\+\.[0-9]\+' "$temp_dir/instance.cfg" | sed 's/fabric-loader-//' | head -1)
+          fi
+          
+          # Look in mmc-pack.json if it exists
+          if [ -z "$fabric_version" ] && [ -f "$temp_dir/mmc-pack.json" ]; then
+            fabric_version=$(jq -r '.components[]? | select(.uid == "net.fabricmc.fabric-loader") | .version' "$temp_dir/mmc-pack.json" 2>/dev/null)
+          fi
+          
+          # Default based on MC version if still not found
+          if [ -z "$fabric_version" ] || [ "$fabric_version" = "null" ]; then
+            case "$mc_version" in
+              1.20.*) fabric_version="0.16.9" ;;
+              1.21.*) fabric_version="0.17.0" ;;
+              *) fabric_version="0.16.9" ;;
+            esac
+            echo "⚠️ Could not detect Fabric version for $name, using default $fabric_version for MC $mc_version"
+          else
+            echo "✅ Detected Fabric Loader version $fabric_version for $name"
           fi
           
           uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
@@ -90,7 +124,7 @@ jobs:
             --arg mc_version "$mc_version" \
             --arg pack_name "OptiArk $mc_version" \
             --arg summary "OptiArk modpack for Minecraft $mc_version - Optimized performance pack" \
-            --arg fabric_version "${{ github.event.inputs.fabric_loader_version }}" \
+            --arg fabric_version "$fabric_version" \
             '{
               formatVersion: 1,
               game: "minecraft",
@@ -108,7 +142,7 @@ jobs:
           zip -r "../../mrpacks/${name}.mrpack" .
           cd ../..
           
-          echo "✅ Created ${name}.mrpack for Minecraft $mc_version"
+          echo "✅ Created ${name}.mrpack (MC: $mc_version, Fabric: $fabric_version)"
           rm -rf "$temp_dir" "$mrpack_dir"
         done
     
