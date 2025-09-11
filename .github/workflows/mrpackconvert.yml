@@ -255,13 +255,13 @@ EOF
         
         total_mb=$((total_size / 1024 / 1024))
         
-        cat >> conversion_report.md << EOF
-        
+        cat >> conversion_report.md << 'EOF'
+
 ## 📊 Summary:
 - **Successfully Converted:** $converted_count files
 - **Failed Conversions:** $failed_count files
 - **Total MRPack Size:** ${total_mb}MB
-        
+
 ## 🚀 Usage:
 1. Download the desired .mrpack file from the artifacts
 2. Import into your Minecraft launcher that supports MRPack format:
@@ -269,13 +269,13 @@ EOF
    - Prism Launcher
    - ATLauncher
    - MultiMC (with MRPack support)
-        
+
 ## 📋 MRPack Format Details:
 - **Format Version:** 1
 - **Game:** Minecraft
 - **Target Version:** ${{ github.event.inputs.minecraft_version }}
 - **Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}
-        
+
 ---
 *MRPack files contain the same content as the original ZIP files but in Modrinth's standardized format for better launcher compatibility.*
 EOF
