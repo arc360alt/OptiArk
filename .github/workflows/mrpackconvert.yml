@@ -164,20 +164,29 @@ jobs:
             
             # Create modrinth.index.json
             echo "📝 Creating modrinth.index.json..."
-            cat > "$mrpack_dir/modrinth.index.json" << EOF
+            cat > "$mrpack_dir/modrinth.index.json" << 'JSONEOF'
 {
   "formatVersion": 1,
   "game": "minecraft",
-  "versionId": "$(uuidgen | tr '[:upper:]' '[:lower:]')",
-  "name": "${{ github.event.inputs.modpack_name }} $version_from_name",
-  "summary": "OptiArk modpack for Minecraft $version_from_name - Converted from ZIP",
+  "versionId": "REPLACE_UUID",
+  "name": "REPLACE_NAME",
+  "summary": "REPLACE_SUMMARY",
   "files": [],
   "dependencies": {
-    "minecraft": "${{ github.event.inputs.minecraft_version }}",
-    "${{ github.event.inputs.mod_loader }}": "${{ github.event.inputs.mod_loader_version }}"
+    "minecraft": "REPLACE_MC_VERSION",
+    "REPLACE_LOADER": "REPLACE_LOADER_VERSION"
   }
 }
-EOF
+JSONEOF
+            
+            # Replace placeholders in the JSON
+            UNIQUE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+            sed -i "s/REPLACE_UUID/$UNIQUE_ID/g" "$mrpack_dir/modrinth.index.json"
+            sed -i "s/REPLACE_NAME/${{ github.event.inputs.modpack_name }} $version_from_name/g" "$mrpack_dir/modrinth.index.json"
+            sed -i "s/REPLACE_SUMMARY/OptiArk modpack for Minecraft $version_from_name - Converted from ZIP/g" "$mrpack_dir/modrinth.index.json"
+            sed -i "s/REPLACE_MC_VERSION/${{ github.event.inputs.minecraft_version }}/g" "$mrpack_dir/modrinth.index.json"
+            sed -i "s/REPLACE_LOADER/${{ github.event.inputs.mod_loader }}/g" "$mrpack_dir/modrinth.index.json"
+            sed -i "s/REPLACE_LOADER_VERSION/${{ github.event.inputs.mod_loader_version }}/g" "$mrpack_dir/modrinth.index.json"
             
             # Create the mrpack file
             mrpack_name="${filename}.mrpack"
@@ -226,19 +235,17 @@ EOF
       run: |
         echo "📋 Generating conversion report..."
         
-        cat > conversion_report.md << EOF
-# ZIP to MRPack Conversion Report
-        
-**Source Release:** [\`${{ steps.release_info.outputs.release_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_info.outputs.release_tag }})
-**Conversion Date:** $(date)
-**Minecraft Version:** ${{ github.event.inputs.minecraft_version }}
-**Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}
-        
-## 📦 Converted MRPack Files:
-        
-| MRPack File | Original ZIP | Size |
-|-------------|--------------|------|
-EOF
+        echo "# ZIP to MRPack Conversion Report" > conversion_report.md
+        echo "" >> conversion_report.md
+        echo "**Source Release:** [\`${{ steps.release_info.outputs.release_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_info.outputs.release_tag }})" >> conversion_report.md
+        echo "**Conversion Date:** $(date)" >> conversion_report.md
+        echo "**Minecraft Version:** ${{ github.event.inputs.minecraft_version }}" >> conversion_report.md
+        echo "**Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}" >> conversion_report.md
+        echo "" >> conversion_report.md
+        echo "## 📦 Converted MRPack Files:" >> conversion_report.md
+        echo "" >> conversion_report.md
+        echo "| MRPack File | Original ZIP | Size |" >> conversion_report.md
+        echo "|-------------|--------------|------|" >> conversion_report.md
         
         total_size=0
         for mrpack_file in mrpacks/*.mrpack; do
@@ -255,30 +262,28 @@ EOF
         
         total_mb=$((total_size / 1024 / 1024))
         
-        cat >> conversion_report.md << 'EOF'
-
-## 📊 Summary:
-- **Successfully Converted:** $converted_count files
-- **Failed Conversions:** $failed_count files
-- **Total MRPack Size:** ${total_mb}MB
-
-## 🚀 Usage:
-1. Download the desired .mrpack file from the artifacts
-2. Import into your Minecraft launcher that supports MRPack format:
-   - Modrinth App
-   - Prism Launcher
-   - ATLauncher
-   - MultiMC (with MRPack support)
-
-## 📋 MRPack Format Details:
-- **Format Version:** 1
-- **Game:** Minecraft
-- **Target Version:** ${{ github.event.inputs.minecraft_version }}
-- **Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}
-
----
-*MRPack files contain the same content as the original ZIP files but in Modrinth's standardized format for better launcher compatibility.*
-EOF
+        echo "" >> conversion_report.md
+        echo "## 📊 Summary:" >> conversion_report.md
+        echo "- **Successfully Converted:** $converted_count files" >> conversion_report.md
+        echo "- **Failed Conversions:** $failed_count files" >> conversion_report.md
+        echo "- **Total MRPack Size:** ${total_mb}MB" >> conversion_report.md
+        echo "" >> conversion_report.md
+        echo "## 🚀 Usage:" >> conversion_report.md
+        echo "1. Download the desired .mrpack file from the artifacts" >> conversion_report.md
+        echo "2. Import into your Minecraft launcher that supports MRPack format:" >> conversion_report.md
+        echo "   - Modrinth App" >> conversion_report.md
+        echo "   - Prism Launcher" >> conversion_report.md
+        echo "   - ATLauncher" >> conversion_report.md
+        echo "   - MultiMC (with MRPack support)" >> conversion_report.md
+        echo "" >> conversion_report.md
+        echo "## 📋 MRPack Format Details:" >> conversion_report.md
+        echo "- **Format Version:** 1" >> conversion_report.md
+        echo "- **Game:** Minecraft" >> conversion_report.md
+        echo "- **Target Version:** ${{ github.event.inputs.minecraft_version }}" >> conversion_report.md
+        echo "- **Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}" >> conversion_report.md
+        echo "" >> conversion_report.md
+        echo "---" >> conversion_report.md
+        echo "*MRPack files contain the same content as the original ZIP files but in Modrinth's standardized format for better launcher compatibility.*" >> conversion_report.md
         
         echo "📋 Conversion report preview:"
         cat conversion_report.md
@@ -292,50 +297,6 @@ EOF
           conversion_report.md
         retention-days: 30
         compression-level: 0
-    
-    - name: Upload to release (optional)
-      if: github.event.inputs.release_tag != ''
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        echo "🚀 Uploading MRPack files to release ${{ github.event.inputs.release_tag }}..."
-        
-        # Check if release exists and we have write permissions
-        release_info=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ github.event.inputs.release_tag }}")
-        
-        release_id=$(echo "$release_info" | jq -r '.id // empty')
-        
-        if [ -n "$release_id" ] && [ "$release_id" != "null" ]; then
-          echo "📤 Found release ID: $release_id"
-          
-          for mrpack_file in mrpacks/*.mrpack; do
-            if [ -f "$mrpack_file" ]; then
-              filename=$(basename "$mrpack_file")
-              echo "📤 Uploading $filename..."
-              
-              # Upload asset to release
-              curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                -H "Content-Type: application/x-modrinth-modpack+zip" \
-                --data-binary @"$mrpack_file" \
-                "https://uploads.github.com/repos/${{ github.repository }}/releases/$release_id/assets?name=$filename"
-              
-              echo "✅ Uploaded $filename to release"
-            fi
-          done
-          
-          # Also upload the conversion report
-          echo "📤 Uploading conversion report..."
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Content-Type: text/markdown" \
-            --data-binary @conversion_report.md \
-            "https://uploads.github.com/repos/${{ github.repository }}/releases/$release_id/assets?name=conversion_report.md"
-          
-          echo "✅ Uploaded conversion report to release"
-        else
-          echo "⚠️  Could not upload to release (release not found or no permissions)"
-          echo "💡 MRPack files are still available as workflow artifacts"
-        fi
     
     - name: Success summary
       run: |
@@ -369,9 +330,6 @@ EOF
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📥 Download:" >> $GITHUB_STEP_SUMMARY
         echo "- 🎯 **Check the [Artifacts section](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})** of this workflow run" >> $GITHUB_STEP_SUMMARY
-        if [ -n "${{ github.event.inputs.release_tag }}" ]; then
-          echo "- 📋 **Or check the [original release](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_info.outputs.release_tag }})** if upload was successful" >> $GITHUB_STEP_SUMMARY
-        fi
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🚀 Compatible Launchers:" >> $GITHUB_STEP_SUMMARY
         echo "- Modrinth App" >> $GITHUB_STEP_SUMMARY
