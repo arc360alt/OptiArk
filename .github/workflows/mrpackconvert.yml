@@ -75,20 +75,24 @@ jobs:
           version=$(echo "$name" | sed 's/OptiArk\.//' | sed 's/\.zip$//')
           uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
           
-          cat > "$mrpack_dir/modrinth.index.json" << EOF
-{
-  "formatVersion": 1,
-  "game": "minecraft",
-  "versionId": "$uuid",
-  "name": "OptiArk $version",
-  "summary": "OptiArk modpack for Minecraft $version",
-  "files": [],
-  "dependencies": {
-    "minecraft": "${{ github.event.inputs.minecraft_version }}",
-    "${{ github.event.inputs.mod_loader }}": "${{ github.event.inputs.mod_loader_version }}"
-  }
-}
-EOF
+          jq -n \
+            --arg uuid "$uuid" \
+            --arg version "$version" \
+            --arg mc_version "${{ github.event.inputs.minecraft_version }}" \
+            --arg loader "${{ github.event.inputs.mod_loader }}" \
+            --arg loader_version "${{ github.event.inputs.mod_loader_version }}" \
+            '{
+              formatVersion: 1,
+              game: "minecraft",
+              versionId: $uuid,
+              name: ("OptiArk " + $version),
+              summary: ("OptiArk modpack for Minecraft " + $version),
+              files: [],
+              dependencies: {
+                minecraft: $mc_version,
+                ($loader): $loader_version
+              }
+            }' > "$mrpack_dir/modrinth.index.json"
           
           cd "$mrpack_dir"
           zip -r "../../mrpacks/${name}.mrpack" .
