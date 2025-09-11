@@ -72,25 +72,35 @@ jobs:
             cp -r "$temp_dir/minecraft/"* "$mrpack_dir/overrides/" 2>/dev/null || true
           fi
           
-          version=$(echo "$name" | sed 's/OptiArk\.//' | sed 's/\.zip$//')
+          # Extract Minecraft version from filename (e.g., OptiArk.1.21.4.zip -> 1.21.4)
+          mc_version=$(echo "$name" | sed 's/OptiArk\.//' | sed 's/\.zip$//')
+          
+          # If version extraction fails, use a default
+          if [ -z "$mc_version" ] || [ "$mc_version" = "$name" ]; then
+            mc_version="1.20.1"
+            echo "⚠️ Could not extract version from $name, using default $mc_version"
+          else
+            echo "✅ Detected Minecraft version $mc_version for $name"
+          fi
+          
           uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
           
           jq -n \
             --arg uuid "$uuid" \
-            --arg version "$version" \
-            --arg mc_version "${{ github.event.inputs.minecraft_version }}" \
-            --arg loader "${{ github.event.inputs.mod_loader }}" \
-            --arg loader_version "${{ github.event.inputs.mod_loader_version }}" \
+            --arg mc_version "$mc_version" \
+            --arg pack_name "OptiArk $mc_version" \
+            --arg summary "OptiArk modpack for Minecraft $mc_version - Optimized performance pack" \
+            --arg fabric_version "${{ github.event.inputs.fabric_loader_version }}" \
             '{
               formatVersion: 1,
               game: "minecraft",
               versionId: $uuid,
-              name: ("OptiArk " + $version),
-              summary: ("OptiArk modpack for Minecraft " + $version),
+              name: $pack_name,
+              summary: $summary,
               files: [],
               dependencies: {
                 minecraft: $mc_version,
-                ($loader): $loader_version
+                "fabric-loader": $fabric_version
               }
             }' > "$mrpack_dir/modrinth.index.json"
           
@@ -98,6 +108,7 @@ jobs:
           zip -r "../../mrpacks/${name}.mrpack" .
           cd ../..
           
+          echo "✅ Created ${name}.mrpack for Minecraft $mc_version"
           rm -rf "$temp_dir" "$mrpack_dir"
         done
     
