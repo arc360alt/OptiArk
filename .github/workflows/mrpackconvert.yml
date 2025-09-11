@@ -295,6 +295,8 @@ EOF
     
     - name: Upload to release (optional)
       if: github.event.inputs.release_tag != ''
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         echo "🚀 Uploading MRPack files to release ${{ github.event.inputs.release_tag }}..."
         
@@ -334,8 +336,6 @@ EOF
           echo "⚠️  Could not upload to release (release not found or no permissions)"
           echo "💡 MRPack files are still available as workflow artifacts"
         fi
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Success summary
       run: |
