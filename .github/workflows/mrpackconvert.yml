@@ -6,15 +6,14 @@ on:
       release_tag:
         description: 'Release tag to convert (leave empty for latest)'
         required: false
-        default: ''
         type: string
       minecraft_version:
-        description: 'Minecraft version for the modpack'
+        description: 'Minecraft version'
         required: true
         default: '1.20.1'
         type: string
       mod_loader:
-        description: 'Mod loader type'
+        description: 'Mod loader'
         required: true
         default: 'fabric-loader'
         type: choice
@@ -28,313 +27,78 @@ on:
         required: true
         default: '0.15.11'
         type: string
-      modpack_name:
-        description: 'Modpack name prefix'
-        required: false
-        default: 'OptiArk'
-        type: string
-      author:
-        description: 'Modpack author'
-        required: false
-        default: 'arc360alt'
-        type: string
 
 jobs:
-  convert-to-mrpack:
+  convert:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
     
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    
-    - name: Get latest release info
-      id: release_info
+    - name: Get release info
+      id: release
       run: |
         if [ -n "${{ github.event.inputs.release_tag }}" ]; then
-          RELEASE_TAG="${{ github.event.inputs.release_tag }}"
-          echo "Using specified release tag: $RELEASE_TAG"
+          TAG="${{ github.event.inputs.release_tag }}"
         else
-          echo "Getting latest release..."
-          RELEASE_TAG=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r .tag_name)
-          echo "Found latest release: $RELEASE_TAG"
+          TAG=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" | jq -r .tag_name)
         fi
-        
-        if [ "$RELEASE_TAG" = "null" ] || [ -z "$RELEASE_TAG" ]; then
-          echo "❌ No release found!"
-          exit 1
-        fi
-        
-        echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
-        echo "✅ Using release: $RELEASE_TAG"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
     
-    - name: Download release assets
+    - name: Download ZIPs
       run: |
-        echo "🔍 Downloading ZIP files from release ${{ steps.release_info.outputs.release_tag }}..."
-        
-        # Create directories
         mkdir -p downloads mrpacks temp
-        
-        # Get release assets
-        ASSETS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.release_info.outputs.release_tag }}" | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url')
-        
-        if [ -z "$ASSETS" ]; then
-          echo "❌ No ZIP files found in release!"
-          exit 1
-        fi
-        
-        # Download each ZIP file
-        echo "$ASSETS" | while read -r url; do
-          if [ -n "$url" ]; then
-            filename=$(basename "$url")
-            echo "📥 Downloading $filename..."
-            curl -L -o "downloads/$filename" "$url"
-            
-            if [ -f "downloads/$filename" ]; then
-              size=$(stat -c%s "downloads/$filename" 2>/dev/null || stat -f%z "downloads/$filename" 2>/dev/null || echo "0")
-              size_mb=$((size / 1024 / 1024))
-              echo "✅ Downloaded $filename (${size_mb}MB)"
-            else
-              echo "❌ Failed to download $filename"
-            fi
-          fi
+        curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/${{ steps.release.outputs.tag }}" | \
+        jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' | \
+        while read url; do
+          curl -L -o "downloads/$(basename "$url")" "$url"
         done
-        
-        # Verify downloads
-        download_count=$(ls downloads/*.zip 2>/dev/null | wc -l || echo "0")
-        echo "📦 Downloaded $download_count ZIP files"
-        
-        if [ "$download_count" -eq 0 ]; then
-          echo "❌ No ZIP files were downloaded!"
-          exit 1
-        fi
     
-    - name: Install required tools
-      run: |
-        echo "🔧 Installing required tools..."
-        sudo apt-get update
-        sudo apt-get install -y jq zip unzip
+    - name: Install tools
+      run: sudo apt-get update && sudo apt-get install -y jq zip unzip uuid-runtime
     
-    - name: Convert ZIP files to MRPack
+    - name: Convert to MRPack
       run: |
-        echo "🔄 Converting ZIP files to MRPack format..."
-        
-        converted_count=0
-        failed_count=0
-        
         for zip_file in downloads/*.zip; do
-          if [ -f "$zip_file" ]; then
-            filename=$(basename "$zip_file" .zip)
-            echo ""
-            echo "🔄 Processing $filename..."
-            
-            # Create temp directory for this conversion
-            temp_dir="temp/$filename"
-            mkdir -p "$temp_dir"
-            
-            # Extract ZIP file
-            echo "📂 Extracting ZIP file..."
-            if ! unzip -q "$zip_file" -d "$temp_dir/"; then
-              echo "❌ Failed to extract $zip_file"
-              failed_count=$((failed_count + 1))
-              continue
-            fi
-            
-            # Create mrpack structure
-            mrpack_dir="temp/${filename}_mrpack"
-            mkdir -p "$mrpack_dir/overrides"
-            
-            # Copy minecraft folder contents to overrides
-            if [ -d "$temp_dir/minecraft" ]; then
-              echo "📁 Copying minecraft folder to overrides..."
-              cp -r "$temp_dir/minecraft/"* "$mrpack_dir/overrides/" 2>/dev/null || true
-            else
-              echo "⚠️  No minecraft folder found in $filename"
-            fi
-            
-            # Extract version from filename (e.g., OptiArk.1.20.1.zip -> 1.20.1)
-            version_from_name=$(echo "$filename" | sed 's/OptiArk\.//' | sed 's/\.zip$//')
-            if [ -z "$version_from_name" ]; then
-              version_from_name="unknown"
-            fi
-            
-            # Create modrinth.index.json
-            echo "📝 Creating modrinth.index.json..."
-            cat > "$mrpack_dir/modrinth.index.json" << 'JSONEOF'
+          if [ ! -f "$zip_file" ]; then continue; fi
+          
+          name=$(basename "$zip_file" .zip)
+          temp_dir="temp/$name"
+          mrpack_dir="temp/${name}_mrpack"
+          
+          mkdir -p "$temp_dir" "$mrpack_dir/overrides"
+          unzip -q "$zip_file" -d "$temp_dir/"
+          
+          if [ -d "$temp_dir/minecraft" ]; then
+            cp -r "$temp_dir/minecraft/"* "$mrpack_dir/overrides/" 2>/dev/null || true
+          fi
+          
+          version=$(echo "$name" | sed 's/OptiArk\.//' | sed 's/\.zip$//')
+          uuid=$(uuidgen | tr '[:upper:]' '[:lower:]')
+          
+          cat > "$mrpack_dir/modrinth.index.json" << EOF
 {
   "formatVersion": 1,
   "game": "minecraft",
-  "versionId": "REPLACE_UUID",
-  "name": "REPLACE_NAME",
-  "summary": "REPLACE_SUMMARY",
+  "versionId": "$uuid",
+  "name": "OptiArk $version",
+  "summary": "OptiArk modpack for Minecraft $version",
   "files": [],
   "dependencies": {
-    "minecraft": "REPLACE_MC_VERSION",
-    "REPLACE_LOADER": "REPLACE_LOADER_VERSION"
+    "minecraft": "${{ github.event.inputs.minecraft_version }}",
+    "${{ github.event.inputs.mod_loader }}": "${{ github.event.inputs.mod_loader_version }}"
   }
 }
-JSONEOF
-            
-            # Replace placeholders in the JSON
-            UNIQUE_ID=$(uuidgen | tr '[:upper:]' '[:lower:]')
-            sed -i "s/REPLACE_UUID/$UNIQUE_ID/g" "$mrpack_dir/modrinth.index.json"
-            sed -i "s/REPLACE_NAME/${{ github.event.inputs.modpack_name }} $version_from_name/g" "$mrpack_dir/modrinth.index.json"
-            sed -i "s/REPLACE_SUMMARY/OptiArk modpack for Minecraft $version_from_name - Converted from ZIP/g" "$mrpack_dir/modrinth.index.json"
-            sed -i "s/REPLACE_MC_VERSION/${{ github.event.inputs.minecraft_version }}/g" "$mrpack_dir/modrinth.index.json"
-            sed -i "s/REPLACE_LOADER/${{ github.event.inputs.mod_loader }}/g" "$mrpack_dir/modrinth.index.json"
-            sed -i "s/REPLACE_LOADER_VERSION/${{ github.event.inputs.mod_loader_version }}/g" "$mrpack_dir/modrinth.index.json"
-            
-            # Create the mrpack file
-            mrpack_name="${filename}.mrpack"
-            echo "📦 Creating $mrpack_name..."
-            
-            cd "$mrpack_dir"
-            if zip -r "../../mrpacks/$mrpack_name" . >/dev/null 2>&1; then
-              cd ../..
-              
-              # Verify the mrpack was created
-              if [ -f "mrpacks/$mrpack_name" ]; then
-                size=$(stat -c%s "mrpacks/$mrpack_name" 2>/dev/null || stat -f%z "mrpacks/$mrpack_name" 2>/dev/null || echo "0")
-                size_mb=$((size / 1024 / 1024))
-                echo "✅ Created $mrpack_name (${size_mb}MB)"
-                converted_count=$((converted_count + 1))
-              else
-                echo "❌ Failed to create $mrpack_name"
-                failed_count=$((failed_count + 1))
-              fi
-            else
-              cd ../..
-              echo "❌ Failed to zip $mrpack_name"
-              failed_count=$((failed_count + 1))
-            fi
-            
-            # Cleanup temp directory
-            rm -rf "$temp_dir" "$mrpack_dir"
-          fi
+EOF
+          
+          cd "$mrpack_dir"
+          zip -r "../../mrpacks/${name}.mrpack" .
+          cd ../..
+          
+          rm -rf "$temp_dir" "$mrpack_dir"
         done
-        
-        echo ""
-        echo "📊 Conversion Summary:"
-        echo "✅ Successfully converted: $converted_count"
-        echo "❌ Failed conversions: $failed_count"
-        
-        if [ $converted_count -eq 0 ]; then
-          echo "❌ No MRPack files were created!"
-          exit 1
-        fi
-        
-        # Store counts for later steps
-        echo "converted_count=$converted_count" >> $GITHUB_ENV
-        echo "failed_count=$failed_count" >> $GITHUB_ENV
     
-    - name: Generate conversion report
-      run: |
-        echo "📋 Generating conversion report..."
-        
-        echo "# ZIP to MRPack Conversion Report" > conversion_report.md
-        echo "" >> conversion_report.md
-        echo "**Source Release:** [\`${{ steps.release_info.outputs.release_tag }}\`](https://github.com/${{ github.repository }}/releases/tag/${{ steps.release_info.outputs.release_tag }})" >> conversion_report.md
-        echo "**Conversion Date:** $(date)" >> conversion_report.md
-        echo "**Minecraft Version:** ${{ github.event.inputs.minecraft_version }}" >> conversion_report.md
-        echo "**Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}" >> conversion_report.md
-        echo "" >> conversion_report.md
-        echo "## 📦 Converted MRPack Files:" >> conversion_report.md
-        echo "" >> conversion_report.md
-        echo "| MRPack File | Original ZIP | Size |" >> conversion_report.md
-        echo "|-------------|--------------|------|" >> conversion_report.md
-        
-        total_size=0
-        for mrpack_file in mrpacks/*.mrpack; do
-          if [ -f "$mrpack_file" ]; then
-            filename=$(basename "$mrpack_file")
-            original_zip=$(basename "$mrpack_file" .mrpack).zip
-            size=$(stat -c%s "$mrpack_file" 2>/dev/null || stat -f%z "$mrpack_file" 2>/dev/null || echo "0")
-            size_mb=$((size / 1024 / 1024))
-            total_size=$((total_size + size))
-            
-            echo "| \`$filename\` | \`$original_zip\` | ${size_mb}MB |" >> conversion_report.md
-          fi
-        done
-        
-        total_mb=$((total_size / 1024 / 1024))
-        
-        echo "" >> conversion_report.md
-        echo "## 📊 Summary:" >> conversion_report.md
-        echo "- **Successfully Converted:** $converted_count files" >> conversion_report.md
-        echo "- **Failed Conversions:** $failed_count files" >> conversion_report.md
-        echo "- **Total MRPack Size:** ${total_mb}MB" >> conversion_report.md
-        echo "" >> conversion_report.md
-        echo "## 🚀 Usage:" >> conversion_report.md
-        echo "1. Download the desired .mrpack file from the artifacts" >> conversion_report.md
-        echo "2. Import into your Minecraft launcher that supports MRPack format:" >> conversion_report.md
-        echo "   - Modrinth App" >> conversion_report.md
-        echo "   - Prism Launcher" >> conversion_report.md
-        echo "   - ATLauncher" >> conversion_report.md
-        echo "   - MultiMC (with MRPack support)" >> conversion_report.md
-        echo "" >> conversion_report.md
-        echo "## 📋 MRPack Format Details:" >> conversion_report.md
-        echo "- **Format Version:** 1" >> conversion_report.md
-        echo "- **Game:** Minecraft" >> conversion_report.md
-        echo "- **Target Version:** ${{ github.event.inputs.minecraft_version }}" >> conversion_report.md
-        echo "- **Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}" >> conversion_report.md
-        echo "" >> conversion_report.md
-        echo "---" >> conversion_report.md
-        echo "*MRPack files contain the same content as the original ZIP files but in Modrinth's standardized format for better launcher compatibility.*" >> conversion_report.md
-        
-        echo "📋 Conversion report preview:"
-        cat conversion_report.md
-    
-    - name: Upload MRPack files as artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: optiark-mrpacks-${{ steps.release_info.outputs.release_tag }}-${{ github.run_number }}
-        path: |
-          mrpacks/*.mrpack
-          conversion_report.md
-        retention-days: 30
-        compression-level: 0
-    
-    - name: Success summary
-      run: |
-        echo "## 🎉 ZIP to MRPack Conversion Complete!" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📋 Conversion Details:" >> $GITHUB_STEP_SUMMARY
-        echo "- **Source Release:** \`${{ steps.release_info.outputs.release_tag }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "- **Minecraft Version:** ${{ github.event.inputs.minecraft_version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Mod Loader:** ${{ github.event.inputs.mod_loader }} ${{ github.event.inputs.mod_loader_version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Successfully Converted:** $converted_count files" >> $GITHUB_STEP_SUMMARY
-        if [ $failed_count -gt 0 ]; then
-          echo "- **Failed Conversions:** $failed_count files" >> $GITHUB_STEP_SUMMARY
-        fi
-        echo "" >> $GITHUB_STEP_SUMMARY
-        
-        echo "### 📦 Generated MRPack Files:" >> $GITHUB_STEP_SUMMARY
-        total_size=0
-        for mrpack_file in mrpacks/*.mrpack; do
-          if [ -f "$mrpack_file" ]; then
-            filename=$(basename "$mrpack_file")
-            size=$(stat -c%s "$mrpack_file" 2>/dev/null || stat -f%z "$mrpack_file" 2>/dev/null || echo "0")
-            size_mb=$((size / 1024 / 1024))
-            total_size=$((total_size + size))
-            echo "- ✅ \`$filename\` (${size_mb}MB)" >> $GITHUB_STEP_SUMMARY
-          fi
-        done
-        
-        total_mb=$((total_size / 1024 / 1024))
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Total:** ${total_mb}MB across $converted_count MRPack files" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 📥 Download:" >> $GITHUB_STEP_SUMMARY
-        echo "- 🎯 **Check the [Artifacts section](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})** of this workflow run" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🚀 Compatible Launchers:" >> $GITHUB_STEP_SUMMARY
-        echo "- Modrinth App" >> $GITHUB_STEP_SUMMARY
-        echo "- Prism Launcher" >> $GITHUB_STEP_SUMMARY
-        echo "- ATLauncher" >> $GITHUB_STEP_SUMMARY
-        echo "- MultiMC (with MRPack support)" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "🎮 **Your OptiArk modpacks are now available in MRPack format!**" >> $GITHUB_STEP_SUMMARY
+        name: mrpack-files
+        path: mrpacks/*.mrpack
