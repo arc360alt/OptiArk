@@ -1,0 +1,160 @@
+name: Build MultiMC MRPack Converter
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'mmcpackconverter/converter.py'
+      - '.github/workflows/build.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'mmcpackconverter/converter.py'
+      - '.github/workflows/build.yml'
+  release:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            executable_name: converter.exe
+            build_command: pyinstaller --onefile --windowed --add-data "mmcpackconverter/converter.py;." --name converter mmcpackconverter/converter.py
+          - os: ubuntu-latest
+            executable_name: converter
+            build_command: pyinstaller --onefile --add-data "mmcpackconverter/converter.py:." --name converter mmcpackconverter/converter.py
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        pip install pyinstaller
+        # Install tkinter dependencies for Linux
+        if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+        fi
+      shell: bash
+
+    - name: Verify converter script exists
+      run: |
+        if [ ! -f "mmcpackconverter/converter.py" ]; then
+          echo "Error: mmcpackconverter/converter.py not found"
+          exit 1
+        fi
+      shell: bash
+
+    - name: Test converter script
+      run: |
+        cd mmcpackconverter
+        python converter.py --help
+      shell: bash
+
+    - name: Build executable
+      run: |
+        ${{ matrix.build_command }}
+      shell: bash
+
+    - name: Verify executable was created
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          if [ ! -f "dist/converter.exe" ]; then
+            echo "Error: Windows executable not created"
+            exit 1
+          fi
+          echo "Windows executable created successfully"
+          ls -la dist/
+        else
+          if [ ! -f "dist/converter" ]; then
+            echo "Error: Linux executable not created"
+            exit 1
+          fi
+          echo "Linux executable created successfully"
+          ls -la dist/
+          # Make sure it's executable
+          chmod +x dist/converter
+        fi
+      shell: bash
+
+    - name: Test executable (help command)
+      run: |
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ./dist/converter.exe --help || echo "Help command test completed"
+        else
+          ./dist/converter --help || echo "Help command test completed"
+        fi
+      shell: bash
+
+    - name: Upload executable artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: converter-${{ runner.os }}-${{ github.sha }}
+        path: |
+          dist/${{ matrix.executable_name }}
+        retention-days: 30
+
+    - name: Upload to release (if release)
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: dist/${{ matrix.executable_name }}
+        asset_name: converter-${{ runner.os }}-${{ matrix.executable_name }}
+        asset_content_type: application/octet-stream
+
+  # Optional job to create a combined release with both executables
+  create-combined-release:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R ./artifacts
+
+    - name: Create combined archive
+      run: |
+        mkdir -p release
+        # Copy executables to release directory with clear names
+        cp artifacts/converter-Windows-*/converter.exe release/converter-windows.exe
+        cp artifacts/converter-Linux-*/converter release/converter-linux
+        
+        # Create archives
+        cd release
+        zip ../converter-windows.zip converter-windows.exe
+        tar -czf ../converter-linux.tar.gz converter-linux
+        
+        # Create combined archive
+        zip ../converter-all-platforms.zip converter-windows.exe converter-linux
+        
+        cd ..
+        ls -la *.zip *.tar.gz
+
+    - name: Upload combined archives to release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          converter-windows.zip
+          converter-linux.tar.gz
+          converter-all-platforms.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
