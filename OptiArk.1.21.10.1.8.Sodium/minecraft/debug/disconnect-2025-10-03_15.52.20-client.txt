@@ -1,0 +1,345 @@
+---- Minecraft Network Protocol Error Report ----
+// Please insert The Internet CD #4
+
+Time: 2025-10-03 15:52:20
+Description: Lithium Class Analysis
+
+java.lang.RuntimeException: Mixin transformation of net.minecraft.class_3231 failed
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java:440)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:336)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java:231)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at java.base/java.lang.Class.getDeclaredMethods0(Native Method)
+	at java.base/java.lang.Class.privateGetDeclaredMethods(Class.java:3578)
+	at java.base/java.lang.Class.getDeclaredMethod(Class.java:2846)
+	at knot//net.caffeinemc.mods.lithium.common.reflection.ReflectionUtil.hasMethodOverride(ReflectionUtil.java:23)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup$NoDragonClassGroup.lambda$static$0(EntityClassGroup.java:140)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.testAndAddClass(EntityClassGroup.java:108)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.checkDetailedContains(EntityClassGroup.java:83)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:78)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:70)
+	at knot//net.minecraft.class_3509.localvar$cep000$lithium$add(class_3509.java:1040)
+	at knot//net.minecraft.class_3509.add(class_3509.java)
+	at knot//net.minecraft.class_5572.method_31764(class_5572.java:25)
+	at knot//net.minecraft.class_5582.method_31870(class_5582.java:122)
+	at knot//net.minecraft.class_638.method_53875(class_638.java:389)
+	at knot//net.minecraft.class_634.method_11112(class_634.java:582)
+	at knot//net.minecraft.class_2604.method_11178(class_2604.java:96)
+	at knot//net.minecraft.class_2604.method_65081(class_2604.java:19)
+	at knot//net.minecraft.class_634.method_48294(class_634.java:2349)
+	at knot//net.minecraft.class_8042.method_48329(class_8042.java:19)
+	at knot//net.minecraft.class_8042.method_65081(class_8042.java:7)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1338)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:969)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:506)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at org.prismlauncher.launcher.impl.StandardLauncher.launch(StandardLauncher.java:105)
+	at org.prismlauncher.EntryPoint.listen(EntryPoint.java:129)
+	at org.prismlauncher.EntryPoint.main(EntryPoint.java:70)
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:381)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:237)
+	at org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClassBytes(MixinTransformer.java:202)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java:435)
+	... 35 more
+Caused by: org.spongepowered.asm.mixin.throwables.MixinApplyError: Mixin [krypton.mixins.json:shared.network.microopt.EntityTrackerEntryMixin from mod krypton] from phase [DEFAULT] in config [krypton.mixins.json] FAILED during APPLY
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.handleMixinError(MixinProcessor.java:686)
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.handleMixinApplyError(MixinProcessor.java:637)
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:368)
+	... 38 more
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException: Critical injection failure: @Redirect annotation on construct$initialPassengersListIsGuavaImmutableList could not find any targets matching 'Lnet/minecraft/class_3231;<init>(Lnet/minecraft/class_3218;Lnet/minecraft/class_1297;IZLjava/util/function/Consumer;Ljava/util/function/BiConsumer;)V' in net/minecraft/class_3231. Using refmap krypton-refmap.json [INJECT_PREPARE Applicator Phase -> krypton.mixins.json:shared.network.microopt.EntityTrackerEntryMixin from mod krypton -> Prepare Injections -> redirect$cba000$krypton$construct$initialPassengersListIsGuavaImmutableList()Ljava/util/List; -> Parse ->  -> Validate Targets]
+	at org.spongepowered.asm.mixin.injection.selectors.TargetSelectors.validate(TargetSelectors.java:346)
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.readAnnotation(InjectionInfo.java:369)
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.<init>(InjectionInfo.java:340)
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.<init>(InjectionInfo.java:331)
+	at org.spongepowered.asm.mixin.injection.struct.RedirectInjectionInfo.<init>(RedirectInjectionInfo.java:46)
+	at java.base/jdk.internal.reflect.DirectConstructorHandleAccessor.newInstance(DirectConstructorHandleAccessor.java:62)
+	at java.base/java.lang.reflect.Constructor.newInstanceWithCaller(Constructor.java:502)
+	at java.base/java.lang.reflect.Constructor.newInstance(Constructor.java:486)
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo$InjectorEntry.create(InjectionInfo.java:196)
+	at org.spongepowered.asm.mixin.injection.struct.InjectionInfo.parse(InjectionInfo.java:664)
+	at org.spongepowered.asm.mixin.transformer.MixinTargetContext.prepareInjections(MixinTargetContext.java:1399)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.prepareInjections(MixinApplicatorStandard.java:731)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.applyMixin(MixinApplicatorStandard.java:315)
+	at org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:246)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437)
+	at org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418)
+	at org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:352)
+	... 38 more
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.getPostMixinClassByteArray(KnotClassDelegate.java:440)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.tryLoadClass(KnotClassDelegate.java:336)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassDelegate.loadClass(KnotClassDelegate.java:231)
+	at net.fabricmc.loader.impl.launch.knot.KnotClassLoader.loadClass(KnotClassLoader.java:119)
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526)
+	at java.base/java.lang.Class.getDeclaredMethods0(Native Method)
+	at java.base/java.lang.Class.privateGetDeclaredMethods(Class.java:3578)
+	at java.base/java.lang.Class.getDeclaredMethod(Class.java:2846)
+	at knot//net.caffeinemc.mods.lithium.common.reflection.ReflectionUtil.hasMethodOverride(ReflectionUtil.java:23)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup$NoDragonClassGroup.lambda$static$0(EntityClassGroup.java:140)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.testAndAddClass(EntityClassGroup.java:108)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.checkDetailedContains(EntityClassGroup.java:83)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:78)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:70)
+	at knot//net.minecraft.class_3509.localvar$cep000$lithium$add(class_3509.java:1040)
+	at knot//net.minecraft.class_3509.add(class_3509.java)
+	at knot//net.minecraft.class_5572.method_31764(class_5572.java:25)
+	at knot//net.minecraft.class_5582.method_31870(class_5582.java:122)
+	at knot//net.minecraft.class_638.method_53875(class_638.java:389)
+	at knot//net.minecraft.class_634.method_11112(class_634.java:582)
+	at knot//net.minecraft.class_2604.method_11178(class_2604.java:96)
+	at knot//net.minecraft.class_2604.method_65081(class_2604.java:19)
+
+-- class java.lang.RuntimeException when getting declared methods. --
+Details:
+	Analyzed class: net.minecraft.class_1532
+	Analyzed method name: method_30948
+	Analyzed method args: [Ljava.lang.Class;@55f9e741
+Stacktrace:
+	at knot//net.caffeinemc.mods.lithium.common.reflection.ReflectionUtil.hasMethodOverride(ReflectionUtil.java:23)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup$NoDragonClassGroup.lambda$static$0(EntityClassGroup.java:140)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.testAndAddClass(EntityClassGroup.java:108)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.checkDetailedContains(EntityClassGroup.java:83)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:78)
+	at knot//net.caffeinemc.mods.lithium.common.entity.EntityClassGroup.contains(EntityClassGroup.java:70)
+	at knot//net.minecraft.class_3509.localvar$cep000$lithium$add(class_3509.java:1040)
+	at knot//net.minecraft.class_3509.add(class_3509.java)
+	at knot//net.minecraft.class_5572.method_31764(class_5572.java:25)
+	at knot//net.minecraft.class_5582.method_31870(class_5582.java:122)
+	at knot//net.minecraft.class_638.method_53875(class_638.java:389)
+	at knot//net.minecraft.class_634.method_11112(class_634.java:582)
+	at knot//net.minecraft.class_2604.method_11178(class_2604.java:96)
+	at knot//net.minecraft.class_2604.method_65081(class_2604.java:19)
+	at knot//net.minecraft.class_634.method_48294(class_634.java:2349)
+	at knot//net.minecraft.class_8042.method_48329(class_8042.java:19)
+	at knot//net.minecraft.class_8042.method_65081(class_8042.java:7)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:55)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1338)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:969)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:506)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at org.prismlauncher.launcher.impl.StandardLauncher.launch(StandardLauncher.java:105)
+	at org.prismlauncher.EntryPoint.listen(EntryPoint.java:129)
+	at org.prismlauncher.EntryPoint.main(EntryPoint.java:70)
+
+-- Incoming Packet --
+Details:
+	Type: clientbound/minecraft:bundle
+	Is Terminal: false
+	Is Skippable: false
+Stacktrace:
+	at knot//net.minecraft.class_2600.method_59803(class_2600.java:42)
+	at knot//net.minecraft.class_8673.method_60882(class_8673.java:149)
+	at knot//net.minecraft.class_8673.method_59807(class_8673.java:128)
+	at knot//net.minecraft.class_11980$class_11981.method_74450(class_11980.java:60)
+	at knot//net.minecraft.class_11980.method_74449(class_11980.java:38)
+	at knot//net.minecraft.class_310.method_1523(class_310.java:1338)
+	at knot//net.minecraft.class_310.method_1514(class_310.java:969)
+	at knot//net.minecraft.client.main.Main.main(Main.java:250)
+	at net.fabricmc.loader.impl.game.minecraft.MinecraftGameProvider.launch(MinecraftGameProvider.java:506)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:72)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)
+	at org.prismlauncher.launcher.impl.StandardLauncher.launch(StandardLauncher.java:105)
+	at org.prismlauncher.EntryPoint.listen(EntryPoint.java:129)
+	at org.prismlauncher.EntryPoint.main(EntryPoint.java:70)
+
+-- Connection --
+Details:
+	Protocol: play
+	Flow: CLIENTBOUND
+	Is Local: false
+	Server type: OTHER
+	Server brand: Paper (Velocity)
+
+-- Dynamic Lighting --
+Details:
+	Mode: fancy
+	Dynamic Light Sources: 6
+	Spatial Hash Occupancy: 6 / 1024
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.9
+	Minecraft Version ID: 1.21.9
+	Operating System: Linux (amd64) version 6.8.0-83-generic
+	Java Version: 21.0.3, Microsoft
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode), Microsoft
+	Memory: 391283512 bytes (373 MiB) / 849346560 bytes (810 MiB) up to 4294967296 bytes (4096 MiB)
+	CPUs: 32
+	Processor Vendor: GenuineIntel
+	Processor Name: 13th Gen Intel(R) Core(TM) i9-13900HX
+	Identifier: Intel64 Family 6 Model 183 Stepping 1
+	Microarchitecture: Raptor Lake
+	Frequency (GHz): -0.00
+	Number of physical packages: 1
+	Number of physical CPUs: 24
+	Number of logical CPUs: 32
+	Graphics card #0 name: Raptor Lake-S UHD Graphics
+	Graphics card #0 vendor: Intel Corporation (0x8086)
+	Graphics card #0 VRAM (MiB): 256.00
+	Graphics card #0 deviceId: 0xa788
+	Graphics card #0 versionInfo: unknown
+	Graphics card #1 name: AD103M / GN21-X11 [GeForce RTX 4090 Laptop GPU]
+	Graphics card #1 vendor: NVIDIA Corporation (0x10de)
+	Graphics card #1 VRAM (MiB): 16416.00
+	Graphics card #1 deviceId: 0x2757
+	Graphics card #1 versionInfo: unknown
+	Virtual memory max (MiB): 17962.00
+	Virtual memory used (MiB): 12058.63
+	Swap memory total (MiB): 2048.00
+	Swap memory used (MiB): 0.00
+	Space in storage for jna.tmpdir (MiB): <path not set>
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): <path not set>
+	Space in storage for io.netty.native.workdir (MiB): <path not set>
+	Space in storage for java.io.tmpdir (MiB): available: 3179.07, total: 3182.80
+	Space in storage for workdir (MiB): available: 983561.00, total: 1876180.25
+	JVM Flags: 2 total; -Xms512m -Xmx4096m
+	Debug Flags: 0 total; 
+	Fabric Mods: 
+		c2me: Concurrent Chunk Management Engine 0.3.5+alpha.0.43+1.21.9
+			c2me-base: Concurrent Chunk Management Engine (Base) 0.3.5+alpha.0.43+1.21.9
+			c2me-client-uncapvd: Concurrent Chunk Management Engine (Client/Uncap View Distance) 0.3.5+alpha.0.43+1.21.9
+			c2me-fixes-chunkio-threading-issues: Concurrent Chunk Management Engine (Fixes/Chunk IO/Threading Issues) 0.3.5+alpha.0.43+1.21.9
+			c2me-fixes-general-threading-issues: Concurrent Chunk Management Engine (Fixes/General/Threading Issues) 0.3.5+alpha.0.43+1.21.9
+			c2me-fixes-worldgen-threading-issues: Concurrent Chunk Management Engine (Fixes/WorldGen/Threading Issues) 0.3.5+alpha.0.43+1.21.9
+			c2me-fixes-worldgen-vanilla-bugs: Concurrent Chunk Management Engine (Fixes/WorldGen/Vanilla Bugs) 0.3.5+alpha.0.43+1.21.9
+			c2me-notickvd: Concurrent Chunk Management Engine (No Tick View Distance) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-allocs: Concurrent Chunk Management Engine (Optimizations/Memory Allocations) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-chunkio: Concurrent Chunk Management Engine (Optimizations/Chunk IO) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-dfc: Concurrent Chunk Management Engine (Optimizations/Density Function Compiler) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-math: Concurrent Chunk Management Engine (Optimizations/Math) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-scheduling: Concurrent Chunk Management Engine (Optimizations/Scheduling) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-worldgen-general: Concurrent Chunk Management Engine (Optimizations/General WorldGen) 0.3.5+alpha.0.43+1.21.9
+			c2me-opts-worldgen-vanilla: Concurrent Chunk Management Engine (Optimizations/Vanilla WorldGen) 0.3.5+alpha.0.43+1.21.9
+			c2me-rewrites-chunk-serializer: Concurrent Chunk Management Engine (Rewrites/Chunk Serializer) 0.3.5+alpha.0.43+1.21.9
+			c2me-rewrites-chunk-system: Concurrent Chunk Management Engine (Rewrites/Chunk System) 0.3.5+alpha.0.43+1.21.9
+			c2me-rewrites-chunkio: Concurrent Chunk Management Engine (Rewrites/Chunk IO) 0.3.5+alpha.0.43+1.21.9
+			c2me-server-utils: Concurrent Chunk Management Engine (Server Utils) 0.3.5+alpha.0.43+1.21.9
+			c2me-threading-lighting: Concurrent Chunk Management Engine (Threading/Lighting) 0.3.5+alpha.0.43+1.21.9
+			com_electronwill_night-config_core: core 3.6.5
+			com_electronwill_night-config_toml: toml 3.6.5
+			io_reactivex_rxjava3_rxjava: rxjava 3.1.8
+			mixinsquared: MixinSquared 0.2.0-beta.6
+			net_objecthunter_exp4j: exp4j 0.4.8
+			org_jctools_jctools-core: jctools-core 4.0.5
+			org_reactivestreams_reactive-streams: reactive-streams 1.0.4
+		chunky: Chunky 1.4.40
+		collective: Collective 8.8
+		cubes-without-borders: Cubes Without Borders 3.0.0+mc1.21.5
+		fabric-api: Fabric API 0.134.0+1.21.9
+			fabric-api-base: Fabric API Base 1.0.0+14b92d897d
+			fabric-api-lookup-api-v1: Fabric API Lookup API (v1) 1.6.106+d17682157d
+			fabric-biome-api-v1: Fabric Biome API (v1) 16.1.0+c2417d4f7d
+			fabric-block-api-v1: Fabric Block API (v1) 1.1.5+d17682157d
+			fabric-block-view-api-v2: Fabric BlockView API (v2) 1.0.34+e4fd1b927d
+			fabric-command-api-v2: Fabric Command API (v2) 2.3.7+328a75ba7d
+			fabric-content-registries-v0: Fabric Content Registries (v0) 10.2.3+b6a242647d
+			fabric-convention-tags-v1: Fabric Convention Tags 2.1.47+7f945d5b7d
+			fabric-convention-tags-v2: Fabric Convention Tags (v2) 2.15.12+3154c1c87d
+			fabric-crash-report-info-v1: Fabric Crash Report Info (v1) 0.3.18+33df5e6e7d
+			fabric-data-attachment-api-v1: Fabric Data Attachment API (v1) 1.8.28+9bce411b7d
+			fabric-data-generation-api-v1: Fabric Data Generation API (v1) 23.2.22+d8b85ef17d
+			fabric-dimensions-v1: Fabric Dimensions API (v1) 4.0.22+38b9cc197d
+			fabric-entity-events-v1: Fabric Entity Events (v1) 2.1.12+14b92d897d
+			fabric-events-interaction-v0: Fabric Events Interaction (v0) 4.0.35+5ba217127d
+			fabric-game-rule-api-v1: Fabric Game Rule API (v1) 1.1.1+e47eaae57d
+			fabric-item-api-v1: Fabric Item API (v1) 11.5.8+9bce411b7d
+			fabric-item-group-api-v1: Fabric Item Group API (v1) 4.2.24+86b3ae577d
+			fabric-key-binding-api-v1: Fabric Key Binding API (v1) 1.1.1+b3ba9c487d
+			fabric-lifecycle-events-v1: Fabric Lifecycle Events (v1) 2.6.9+33df5e6e7d
+			fabric-loot-api-v2: Fabric Loot API (v2) 3.0.64+3f89f5a57d
+			fabric-loot-api-v3: Fabric Loot API (v3) 2.0.11+d17682157d
+			fabric-message-api-v1: Fabric Message API (v1) 6.1.7+3154c1c87d
+			fabric-model-loading-api-v1: Fabric Model Loading API (v1) 6.0.0+3ffd6ef07d
+			fabric-networking-api-v1: Fabric Networking API (v1) 5.0.13+d269470c7d
+			fabric-object-builder-api-v1: Fabric Object Builder API (v1) 21.1.24+9bce411b7d
+			fabric-particles-v1: Fabric Particles (v1) 4.2.2+a0ee59a47d
+			fabric-recipe-api-v1: Fabric Recipe API (v1) 8.1.26+d17682157d
+			fabric-registry-sync-v0: Fabric Registry Sync (v0) 6.1.41+679c8c5c7d
+			fabric-renderer-api-v1: Fabric Renderer API (v1) 7.1.1+328a75ba7d
+			fabric-renderer-indigo: Fabric Renderer - Indigo 4.0.19+328a75ba7d
+			fabric-rendering-fluids-v1: Fabric Rendering Fluids (v1) 3.1.38+86b3ae577d
+			fabric-rendering-v1: Fabric Rendering (v1) 16.0.1+328a75ba7d
+			fabric-resource-conditions-api-v1: Fabric Resource Conditions API (v1) 5.0.28+33df5e6e7d
+			fabric-resource-loader-v0: Fabric Resource Loader (v0) 3.2.2+3388a3b27d
+			fabric-resource-loader-v1: Fabric Resource Loader (v1) 1.0.2+225bca407d
+			fabric-screen-api-v1: Fabric Screen API (v1) 3.1.0+9c82a7987d
+			fabric-screen-handler-api-v1: Fabric Screen Handler API (v1) 1.3.150+d17682157d
+			fabric-serialization-api-v1: Fabric Serialization API (v1) 1.0.0+d857c9767d
+			fabric-sound-api-v1: Fabric Sound API (v1) 1.0.45+328a75ba7d
+			fabric-tag-api-v1: Fabric Tag API (v1) 1.2.10+2fa446b27d
+			fabric-transfer-api-v1: Fabric Transfer API (v1) 6.0.15+79ec2c127d
+			fabric-transitive-access-wideners-v1: Fabric Transitive Access Wideners (v1) 6.5.3+41eb43437d
+		fabric-language-kotlin: Fabric Language Kotlin 1.13.6+kotlin.2.2.20
+			org_jetbrains_kotlin_kotlin-reflect: kotlin-reflect 2.2.20
+			org_jetbrains_kotlin_kotlin-stdlib: kotlin-stdlib 2.2.20
+			org_jetbrains_kotlin_kotlin-stdlib-jdk7: kotlin-stdlib-jdk7 2.2.20
+			org_jetbrains_kotlin_kotlin-stdlib-jdk8: kotlin-stdlib-jdk8 2.2.20
+			org_jetbrains_kotlinx_atomicfu-jvm: atomicfu-jvm 0.29.0
+			org_jetbrains_kotlinx_kotlinx-coroutines-core-jvm: kotlinx-coroutines-core-jvm 1.10.2
+			org_jetbrains_kotlinx_kotlinx-coroutines-jdk8: kotlinx-coroutines-jdk8 1.10.2
+			org_jetbrains_kotlinx_kotlinx-datetime-jvm: kotlinx-datetime-jvm 0.7.1
+			org_jetbrains_kotlinx_kotlinx-io-bytestring-jvm: kotlinx-io-bytestring-jvm 0.8.0
+			org_jetbrains_kotlinx_kotlinx-io-core-jvm: kotlinx-io-core-jvm 0.8.0
+			org_jetbrains_kotlinx_kotlinx-serialization-cbor-jvm: kotlinx-serialization-cbor-jvm 1.9.0
+			org_jetbrains_kotlinx_kotlinx-serialization-core-jvm: kotlinx-serialization-core-jvm 1.9.0
+			org_jetbrains_kotlinx_kotlinx-serialization-json-jvm: kotlinx-serialization-json-jvm 1.9.0
+		fabricloader: Fabric Loader 0.17.2
+			mixinextras: MixinExtras 0.5.0
+		ferritecore: FerriteCore 8.0.0
+		iris: Iris 1.9.3+mc1.21.9
+			io_github_douira_glsl-transformer: glsl-transformer 3.0.0-pre3
+			org_anarres_jcpp: jcpp 1.4.14
+			org_antlr_antlr4-runtime: antlr4-runtime 4.13.1
+		isxander-main-menu-credits: Main Menu Credits 1.2.0
+		java: OpenJDK 64-Bit Server VM 21
+		krypton: Krypton 0.2.9
+			com_velocitypowered_velocity-native: velocity-native 3.4.0-SNAPSHOT
+		lambdynlights: LambDynamicLights 4.7.2+1.21.9
+			lambdynlights_runtime: LambDynamicLights (Runtime) 4.7.2+1.21.9
+				lambdynlights_api: LambDynamicLights (API) 4.7.2+1.21.9
+					yumi_commons_collections: Yumi Commons: Collections 1.0.0-beta.5
+					yumi_commons_core: Yumi Commons: Core 1.0.0-beta.5
+					yumi_commons_event: Yumi Commons: Event 1.0.0-beta.5
+				pride: Pride Lib 1.5.1+1.21.9
+				spruceui: SpruceUI 9.0.0+1.21.9
+				yumi_mc_core: Yumi Minecraft Libraries: Foundation 1.0.0-alpha.16+1.21.9
+		lithium: Lithium 0.19.1+mc1.21.9
+		minecraft: Minecraft 1.21.9
+		modmenu: Mod Menu 1.21.9-test
+		mr_ly_clumps: Clumps 1-v1.1.0
+		mutils: ModpackUtils 1.2.0+fabric.1.21.5
+		oreharvester: Ore Harvester 1.5
+		placeholder-api: Placeholder API 2.8.0+1.21.9
+		reeses-sodium-options: Reese's Sodium Options 1.8.5+mc1.21.9
+		sodium: Sodium 0.7.0+mc1.21.9
+		treeharvester: Tree Harvester 9.2
+		vmp: Very Many Players 0.2.0+beta.7.212+1.21.9
+			com_ibm_async_asyncutil: asyncutil 0.1.0
+		wi_zoom: WI Zoom 1.6-MC1.21.9
+		yet_another_config_lib_v3: YetAnotherConfigLib 3.8.0+1.21.9-fabric
+			com_twelvemonkeys_common_common-image: common-image 3.12.0
+			com_twelvemonkeys_common_common-io: common-io 3.12.0
+			com_twelvemonkeys_common_common-lang: common-lang 3.12.0
+			com_twelvemonkeys_imageio_imageio-core: imageio-core 3.12.0
+			com_twelvemonkeys_imageio_imageio-metadata: imageio-metadata 3.12.0
+			com_twelvemonkeys_imageio_imageio-webp: imageio-webp 3.12.0
+			org_quiltmc_parsers_gson: gson 0.2.1
+			org_quiltmc_parsers_json: json 0.2.1
+	Loaded Shaderpack: (off)
+	Yumi MC Core: 1.0.0-alpha.16+1.21.9

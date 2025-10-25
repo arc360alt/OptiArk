@@ -1,0 +1,11 @@
+/bluemap reload
+/vulcan
+/enderchest
+/warp spwan
+/warp oak
+/home
+/spawn
+/gamemode creative
+/ignoreclaims
+/removeclaim
+/home
