@@ -113,6 +113,8 @@ def format_releases(repo_owner, repo_name):
     # Add the static Embeddium and Old categories
     organized_data["Embeddium"] = {
         "1.20.1": "https://github.com/arc360alt/arcswebsite/releases/download/oa1.7/OptiArk.1.20.1.1.7.EB.mrpack",
+        "1.19.4": "https://github.com/arc360alt/arcswebsite/releases/download/oa1.7OLD/OptiArk.1.19.4.1.8.EB.mrpack",
+        "1.18.2": "https://github.com/arc360alt/optiark-website/releases/download/old/OptiArk.1.18.2.1.8.EB.mrpack",
         "1.16.5": "https://github.com/arc360alt/arcswebsite/releases/download/oa1.7/OptiArk.1.16.5.1.7.EB.mrpack"
     }
     
