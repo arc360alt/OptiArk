@@ -1,0 +1,923 @@
+#!/usr/bin/env python3
+"""
+MultiMC/Prism Launcher Instance to MRPack Converter
+Modern PySide6 GUI with drag-and-drop support
+"""
+
+import json
+import os
+import sys
+import zipfile
+import hashlib
+import requests
+import shutil
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+import configparser
+import time
+import threading
+
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                               QHBoxLayout, QLabel, QPushButton, QFileDialog,
+                               QTextEdit, QProgressBar, QFrame)
+from PySide6.QtCore import Qt, Signal, QObject, QPropertyAnimation, QEasingCurve, QTimer, QSize
+from PySide6.QtGui import (
+    QDragEnterEvent, QDropEvent, QPainter, QPainterPath,
+    QFont, QFontMetrics, QIcon, QPixmap
+)
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QFileIconProvider
+from PySide6.QtGui import QColor, QPen
+
+
+
+class WorkerSignals(QObject):
+    progress = Signal(int, int, str, int)  # add stage_weight
+    log = Signal(str)
+    finished = Signal(bool)
+
+
+class MultiMCToMRPackConverter:
+    def __init__(self, signals=None):
+        self.signals = signals
+        self.modrinth_api_base = "https://api.modrinth.com/v2"
+        self.session = requests.Session()
+        self.completed_weight = 0
+        self.session.headers.update({
+            'User-Agent': 'MultiMC-MRPack-Converter/1.0'
+        })
+        self.signals = signals
+        self.completed_weight = 0
+        
+    def log(self, message: str):
+        if self.signals:
+            self.signals.log.emit(message)
+        else:
+            print(message)
+    
+    def update_progress(self, current: int, total: int, message: str = "", stage_weight: int = 100):
+        if self.signals:
+            self.signals.progress.emit(current, total, message, stage_weight)
+            stage_weight = 20
+            self.signals.progress.emit(progress, 100, f"Extracted {i}/{len(zip_ref.infolist())} files", stage_weight)
+
+
+    def get_minecraft_version_and_loader(self, config: Dict[str, Any]) -> (str, str):
+        minecraft_version = "1.21.10"  # default
+        loader = "minecraft"           # default
+
+        components = config.get("mmcpack.components", [])
+        for comp in components:
+            name = comp.get("cachedName", "").lower()
+            if name == "minecraft":
+                minecraft_version = comp.get("version") or comp.get("cachedVersion") or minecraft_version
+            elif "fabric" in name:
+                loader = "fabric"
+            elif "forge" in name:
+                loader = "forge"
+
+        return minecraft_version, loader
+        
+    def convert_instance(self, instance_path: Path, output_dir: Path) -> bool:
+        """
+        High-level wrapper that performs a full MultiMC → .mrpack conversion.
+        Returns True on success, False on failure.
+        """
+        try:
+            # 1. Read instance config
+            config = self.read_instance_config(instance_path)
+            if not config:
+                self.log("Could not read instance configuration")
+                return False
+
+            # 2. Determine pack name
+            name = config.get("name", "ConvertedPack")
+
+            # 3. Prepare metadata.json
+            metadata = self.build_metadata(config, name)
+
+            # 4. Gather mod, resourcepack, shader, overrides, etc.
+            overrides = self.build_overrides(instance_path)
+
+            # 5. Write final .mrpack
+            output_file = self.write_mrpack(name, metadata, overrides, output_dir)
+
+            self.log(f"Successfully wrote {output_file}")
+            return True
+
+        except Exception as e:
+            self.log(f"Conversion failed: {e}")
+            return False
+
+
+    def read_instance_config(self, instance_path: Path) -> Dict[str, Any]:
+        """
+        Read a MultiMC/Prism/PolyMC instance configuration.
+        Accepts `instance_path` as the instance directory or instance.cfg file.
+        Merges mmc-pack.json keys under 'mmcpack.*'.
+        """
+        # Normalize: if instance.cfg is passed directly, use its parent
+        if instance_path.is_file() and instance_path.name == "instance.cfg":
+            cfg_path = instance_path
+            instance_dir = instance_path.parent
+        else:
+            cfg_path = instance_path / "instance.cfg"
+            instance_dir = instance_path
+
+        config: Dict[str, Any] = {}
+
+        # Read instance.cfg (existing logic)
+        if cfg_path.exists():
+            try:
+                current_section = None
+                with open(cfg_path, "r", encoding="utf-8", errors="ignore") as f:
+                    for raw in f:
+                        line = raw.strip()
+                        if not line or line.startswith(";") or line.startswith("#"):
+                            continue
+                        if line.startswith("[") and line.endswith("]"):
+                            current_section = line[1:-1].strip()
+                            continue
+                        if "=" in line:
+                            key, value = line.split("=", 1)
+                            key = key.strip()
+                            value = value.strip()
+                            if current_section:
+                                config[f"{current_section}.{key}"] = value
+                                if current_section.lower() == "general":
+                                    config[key] = value
+                            else:
+                                config[key] = value
+            except Exception as e:
+                self.log(f"Failed to parse instance.cfg: {e}")
+
+            # Merge mmc-pack.json from the root of the instance directory
+            mmc_pack_path = instance_dir / "mmc-pack.json"
+
+            # If not found at root, maybe zip contained a single folder, check first subfolder
+            if not mmc_pack_path.exists() or not mmc_pack_path.is_file():
+                subdirs = [d for d in instance_dir.iterdir() if d.is_dir()]
+                if len(subdirs) == 1:
+                    mmc_pack_path = subdirs[0] / "mmc-pack.json"
+
+            if mmc_pack_path.exists() and mmc_pack_path.is_file():
+                self.log(f"Found mmc-pack.json at: {mmc_pack_path}")
+                try:
+                    with open(mmc_pack_path, "r", encoding="utf-8") as f:
+                        pack_data = json.load(f)
+                        for k, v in pack_data.items():
+                            config[f"mmcpack.{k}"] = v  # prefix to avoid collisions
+                except Exception as e:
+                    self.log(f"Failed to read mmc-pack.json: {e}")
+            else:
+                self.log("mmc-pack.json not found in instance root or subfolder")
+
+            return config
+                
+    def get_minecraft_version(self, config: Dict[str, Any]) -> str:
+        version_keys = [
+            'IntendedVersion',
+            'MinecraftVersion',
+            'minecraft_version',
+            'General.IntendedVersion',
+            'General.MinecraftVersion',
+            'mmcpack.minecraft_version',
+            'mmcpack.IntendedVersion'
+        ]
+        
+        for key in version_keys:
+            if key in config:
+                return str(config[key])
+        
+        # fallback if all else fails
+        self.log("Could not detect Minecraft version, defaulting to 1.21.10")
+        return "1.21.10"
+    
+    def get_forge_version(self, config: Dict[str, Any]) -> Optional[str]:
+        forge_keys = ['ForgeVersion', 'forge_version', 'General.ForgeVersion']
+        for key in forge_keys:
+            if key in config:
+                return str(config[key])
+        return None
+    
+    def get_fabric_version(self, config: Dict[str, Any]) -> Optional[str]:
+        fabric_keys = ['FabricLoaderVersion', 'fabric_version', 'General.FabricLoaderVersion']
+        for key in fabric_keys:
+            if key in config:
+                return str(config[key])
+        return None
+    
+    def calculate_file_hash(self, file_path: Path) -> Dict[str, str]:
+        sha1 = hashlib.sha1()
+        sha512 = hashlib.sha512()
+        
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                sha1.update(chunk)
+                sha512.update(chunk)
+        
+        return {'sha1': sha1.hexdigest(), 'sha512': sha512.hexdigest()}
+    
+    def search_modrinth_mod(self, filename: str, file_hash: str) -> Optional[Dict[str, Any]]:
+        try:
+            response = self.session.get(
+                f"{self.modrinth_api_base}/version_file/{file_hash}?algorithm=sha1"
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            
+            search_query = filename.replace('.jar', '').replace('_', ' ').replace('-', ' ')
+            response = self.session.get(
+                f"{self.modrinth_api_base}/search",
+                params={'query': search_query, 'limit': 5, 'facets': '[["project_type:mod"]]'}
+            )
+            
+            if response.status_code == 200:
+                results = response.json()
+                if results['hits']:
+                    project = results['hits'][0]
+                    versions_response = self.session.get(
+                        f"{self.modrinth_api_base}/project/{project['project_id']}/version"
+                    )
+                    if versions_response.status_code == 200:
+                        versions = versions_response.json()
+                        for version in versions:
+                            for file in version['files']:
+                                if file['filename'].lower() == filename.lower():
+                                    return version
+            
+            time.sleep(0.1)
+            return None
+            
+        except Exception as e:
+            self.log(f"Error searching for mod {filename}: {e}")
+            return None
+    
+    def process_mods_directory(self, mods_path: Path, minecraft_version: str) -> List[Dict[str, Any]]:
+        mod_entries = []
+        
+        if not mods_path.exists():
+            return mod_entries
+        
+        mod_files = list(mods_path.glob("*.jar"))
+        total_mods = len(mod_files)
+        
+        for i, mod_file in enumerate(mod_files):
+            self.log(f"Processing mod: {mod_file.name}")
+            self.update_progress(i, total_mods, f"Processing {mod_file.name}")
+            
+            hashes = self.calculate_file_hash(mod_file)
+            file_size = mod_file.stat().st_size
+            
+            modrinth_data = self.search_modrinth_mod(mod_file.name, hashes['sha1'])
+            
+            if modrinth_data:
+                primary_file = None
+                for file in modrinth_data['files']:
+                    if file['primary']:
+                        primary_file = file
+                        break
+                
+                if not primary_file:
+                    primary_file = modrinth_data['files'][0]
+                
+                mod_entry = {
+                    "path": f"mods/{mod_file.name}",
+                    "hashes": {
+                        "sha1": primary_file['hashes']['sha1'],
+                        "sha512": primary_file['hashes']['sha512']
+                    },
+                    "env": {"client": "required", "server": "required"},
+                    "downloads": [primary_file['url']],
+                    "fileSize": primary_file['size']
+                }
+                mod_entries.append(mod_entry)
+                self.log(f"  Found on Modrinth: {mod_file.name}")
+            else:
+                self.log(f"  Not found on Modrinth, will include as override: {mod_file.name}")
+        
+        return mod_entries
+    
+    def create_mrpack_index(self, instance_path: Path, config: Dict[str, Any]) -> Dict[str, Any]:
+        minecraft_version, loader = self.get_minecraft_version_and_loader(config)
+        loader_version = None
+
+        # Only set loader_version if not vanilla
+        if loader != "minecraft":
+            # Grab version from mmc-pack.json if available
+            loader_version = str(config.get("mmcpack.version", minecraft_version))
+
+        # Mods path
+        mods_path = instance_path / "minecraft" / "mods"
+        if not mods_path.exists():
+            mods_path = instance_path / "mods"
+
+        mod_files = self.process_mods_directory(mods_path, minecraft_version)
+
+        name = config.get('name', config.get('General.name', instance_path.name))
+        summary = f"Converted from MultiMC/Prism instance: {name}"
+
+        mrpack_index = {
+            "formatVersion": 1,
+            "game": "minecraft",
+            "versionId": "1.0.0",
+            "name": name,
+            "summary": summary,
+            "files": mod_files,
+            "dependencies": {"minecraft": minecraft_version}
+        }
+
+        if loader != "minecraft":
+            mrpack_index["dependencies"][loader] = loader_version
+
+        return mrpack_index
+    
+    def copy_overrides(self, instance_path: Path, temp_dir: Path):
+        overrides_dir = temp_dir / "overrides"
+        overrides_dir.mkdir(exist_ok=True)
+        
+        minecraft_dir = instance_path / "minecraft"
+        if not minecraft_dir.exists():
+            minecraft_dir = instance_path
+        
+        for item in minecraft_dir.iterdir():
+            if item.name in ['.minecraft', 'mods']:
+                if item.name == 'mods':
+                    mods_override_dir = overrides_dir / "mods"
+                    mods_override_dir.mkdir(exist_ok=True)
+                    
+                    for mod_file in item.glob("*.jar"):
+                        hashes = self.calculate_file_hash(mod_file)
+                        modrinth_data = self.search_modrinth_mod(mod_file.name, hashes['sha1'])
+                        
+                        if not modrinth_data:
+                            shutil.copy2(mod_file, mods_override_dir)
+                            self.log(f"Copied {mod_file.name} to overrides")
+                else:
+                    continue
+            elif item.is_dir() and item.name not in ['logs', 'crash-reports', 'saves']:
+                shutil.copytree(item, overrides_dir / item.name, dirs_exist_ok=True)
+            elif item.is_file() and item.suffix in ['.json', '.txt', '.cfg', '.properties', '.toml']:
+                shutil.copy2(item, overrides_dir)
+    
+    def convert_instance(self, instance_path: Path, output_path: Path) -> bool:
+        try:
+            self.log(f"Converting instance: {instance_path}")
+            self.update_progress(0, 100, "Starting conversion...")
+            
+            config = self.read_instance_config(instance_path)
+            if not config:
+                self.log("Error: Could not read instance configuration")
+                return False
+            
+            self.update_progress(10, 100, "Reading configuration...")
+            
+            import tempfile
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir)
+                
+                self.log("Creating modrinth.index.json...")
+                self.update_progress(20, 100, "Creating index...")
+                mrpack_index = self.create_mrpack_index(instance_path, config)
+                
+                index_path = temp_path / "modrinth.index.json"
+                with open(index_path, 'w', encoding='utf-8') as f:
+                    json.dump(mrpack_index, f, indent=2, ensure_ascii=False)
+                
+                self.update_progress(80, 100, "Copying overrides...")
+                self.log("Copying override files...")
+                self.copy_overrides(instance_path, temp_path)
+                
+                self.update_progress(90, 100, "Creating mrpack...")
+                self.log(f"Creating mrpack: {output_path}")
+                import zipfile
+                with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for file_path in temp_path.rglob('*'):
+                        if file_path.is_file():
+                            arcname = file_path.relative_to(temp_path)
+                            zipf.write(file_path, arcname)
+                
+                self.update_progress(100, 100, "Complete!")
+                self.log(f"Successfully created mrpack: {output_path}")
+                return True
+                
+        except Exception as e:
+            self.log(f"Error converting instance: {e}")
+            return False
+
+
+from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtCore import Qt, QRect, QSize
+import os
+
+class AnimatedArrow(QWidget):
+    def __init__(self, parent=None, image_file="arrow.png"):
+        super().__init__(parent)
+        self.progress = 0  # 0-100
+        self.completed_weight = 0
+
+        # Load the image relative to this script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.pixmap = QPixmap(os.path.join(script_dir, image_file))
+
+        if self.pixmap.isNull():
+            print(f"Warning: Could not load '{image_file}'")
+
+        self.setMinimumSize(100, 100)  # Minimum size for layout
+        self.completed_weight = 0 
+
+    def setProgress(self, progress: int):
+        """progress: 0-100"""
+        self.progress = max(0, min(100, progress))
+        self.update()
+
+    def paintEvent(self, event):
+        if self.pixmap.isNull():
+            return
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        widget_width = self.width()
+        widget_height = self.height()
+
+        # Maintain aspect ratio
+        pixmap_ratio = self.pixmap.width() / self.pixmap.height()
+        widget_ratio = widget_width / widget_height
+
+        if pixmap_ratio > widget_ratio:
+            draw_width = widget_width
+            draw_height = int(widget_width / pixmap_ratio)
+        else:
+            draw_height = widget_height
+            draw_width = int(widget_height * pixmap_ratio)
+
+        # Center in widget
+        x_offset = (widget_width - draw_width) // 2
+        y_offset = (widget_height - draw_height) // 2
+
+        # Reveal width based on progress
+        reveal_width = int((self.progress / 100) * self.pixmap.width())
+
+        if reveal_width > 0:
+            src_rect = QRect(0, 0, reveal_width, self.pixmap.height())
+            dst_rect = QRect(x_offset, y_offset, int((reveal_width / self.pixmap.width()) * draw_width), draw_height)
+            painter.drawPixmap(dst_rect, self.pixmap, src_rect)
+
+class DropZone(QFrame):
+    fileDropped = Signal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.has_file = False
+        self.file_path = ""
+        self.file_icon = None
+        self.completed_weight = 0
+        
+        self.setMinimumSize(280, 280)
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #e9ecef;
+                border-color: #2980b9;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        self.icon_label.setMinimumSize(128, 128)
+        
+        self.text_label = QLabel("Drag your OptiArk .zip here\n(or any other MMC zip)\n\nOr click to open your file explorer")
+        self.text_label.setAlignment(Qt.AlignCenter)
+        self.text_label.setWordWrap(True)
+        self.text_label.setStyleSheet("color: #6c757d; font-size: 14px;")
+        
+        self.filename_label = QLabel()
+        self.filename_label.setAlignment(Qt.AlignCenter)
+        self.filename_label.setStyleSheet("color: #666666; font-size: 13px; font-weight: bold;")
+        self.filename_label.hide()
+        
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.text_label)
+        layout.addWidget(self.filename_label)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.setStyleSheet("""
+                DropZone {
+                    background-color: #d4edff;
+                    border: 3px dashed #2980b9;
+                    border-radius: 20px;
+                }
+            """)
+    
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #e9ecef;
+                border-color: #2980b9;
+            }
+        """)
+    
+    def dropEvent(self, event: QDropEvent):
+        files = [u.toLocalFile() for u in event.mimeData().urls()]
+        if files:
+            self.setFile(files[0])
+            self.fileDropped.emit(files[0])
+        
+        self.dragLeaveEvent(None)
+    
+    def mousePressEvent(self, event):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Instance Archive",
+            "",
+            "Archive Files (*.zip);;All Files (*.*)"
+        )
+        if file_path:
+            self.setFile(file_path)
+            self.fileDropped.emit(file_path)
+    
+    def setFile(self, file_path):
+        self.has_file = True
+        self.file_path = file_path
+        
+        # Get file icon
+        file_info = Path(file_path)
+        icon_provider = QFileIconProvider()
+        icon = icon_provider.icon(QFileIconProvider.File)
+        
+        # Set large icon
+        pixmap = icon.pixmap(QSize(96, 96))
+        self.icon_label.setPixmap(pixmap)
+        
+        # Show filename
+        self.filename_label.setText(file_info.name)
+        self.filename_label.show()
+        self.text_label.hide()
+        
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #d4edff;
+                border: 3px solid #2980b9;
+                border-radius: 20px;
+            }
+        """)
+    
+    def reset(self):
+        self.has_file = False
+        self.file_path = ""
+        self.icon_label.clear()
+        self.filename_label.hide()
+        self.text_label.show()
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #e9ecef;
+                border-color: #2980b9;
+            }
+        """)
+
+
+class OutputZone(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(280, 280)
+        self.completed_weight = 0
+        self.setStyleSheet("""
+            OutputZone {
+                background-color: #212121;
+                border: 3px solid #95a5a6;
+                border-radius: 20px;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        self.label = QLabel("Output")
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setStyleSheet("color: #666666; font-size: 48px; font-weight: bold;")
+        
+        self.status_label = QLabel("Ready to convert")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: #7f8c8d; font-size: 14px;")
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.status_label)
+        
+        self.setLayout(layout)
+    
+    def setStatus(self, status, is_success=False):
+        self.status_label.setText(status)
+        if is_success:
+            self.setStyleSheet("""
+                OutputZone {
+                    background-color: #d5f4e6;
+                    border: 3px solid #27ae60;
+                    border-radius: 20px;
+                }
+            """)
+            self.status_label.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
+        else:
+            self.setStyleSheet("""
+                OutputZone {
+                    background-color: #212121;
+                    border: 3px solid #95a5a6;
+                    border-radius: 20px;
+                }
+            """)
+            self.status_label.setStyleSheet("color: #7f8c8d; font-size: 14px;")
+
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.instance_path = None
+        self.output_path = None
+        self.completed_weight = 0
+        
+        self.setWindowTitle("OptiArk Pack Converter")
+        self.setMinimumSize(900, 700)
+        
+        # Main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_widget.setLayout(main_layout)
+        
+        # Title
+        title = QLabel("OptiArk Pack Converter")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 36px; font-weight: bold; color: #666666; margin-bottom: 10px;")
+        main_layout.addWidget(title)
+        
+        # Subtitle
+        subtitle = QLabel("Reminder: this works for any MultiMC pack, but this is specifically made for OptiArk")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("font-size: 13px; color: #7f8c8d; margin-bottom: 20px;")
+        main_layout.addWidget(subtitle)
+        
+        # Drop zones layout
+        zones_layout = QHBoxLayout()
+        zones_layout.setSpacing(30)
+        
+        # Input drop zone
+        self.drop_zone = DropZone()
+        self.drop_zone.fileDropped.connect(self.on_file_dropped)
+        zones_layout.addWidget(self.drop_zone)
+        
+        # Animated arrow
+        self.arrow = AnimatedArrow()
+        zones_layout.addWidget(self.arrow)
+        
+        # Output zone
+        self.output_zone = OutputZone()
+        zones_layout.addWidget(self.output_zone)
+        
+        main_layout.addLayout(zones_layout)
+        
+        # Convert button
+        self.convert_btn = QPushButton("Convert to MRPack")
+        self.convert_btn.setEnabled(False)
+        self.convert_btn.setMinimumHeight(50)
+        self.convert_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+            QPushButton:disabled {
+                background-color: #bdc3c7;
+            }
+        """)
+        self.convert_btn.clicked.connect(self.start_conversion)
+        main_layout.addWidget(self.convert_btn)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumHeight(30)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #bdc3c7;
+                border-radius: 10px;
+                text-align: center;
+                background-color: #ecf0f1;
+                color: #666666;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                                  stop:0 #3498db, stop:1 #2ecc71);
+                border-radius: 8px;
+            }
+        """)
+        self.progress_bar.hide()
+        main_layout.addWidget(self.progress_bar)
+        
+        # Log area
+        log_label = QLabel("Conversion Log:")
+        log_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #666666; margin-top: 10px;")
+        main_layout.addWidget(log_label)
+        
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #666666;
+                color: #ecf0f1;
+                border: 2px solid #34495e;
+                border-radius: 10px;
+                padding: 10px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+            }
+        """)
+        main_layout.addWidget(self.log_text)
+        
+        # Set window style
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1f1f1f;
+            }
+        """)
+    
+    def on_file_dropped(self, file_path):
+        self.instance_path = Path(file_path)
+        self.convert_btn.setEnabled(True)
+        self.log_text.append(f"<span style='color: #3498db;'>✓</span> File selected: {self.instance_path.name}")
+        
+        # Auto-generate output path
+        self.output_path = self.instance_path.parent / f"{self.instance_path.stem}.mrpack"
+        self.log_text.append(f"<span style='color: #95a5a6;'>→</span> Output will be: {self.output_path.name}")
+
+    def on_progress(self, stage_progress, stage_total, message, stage_weight):
+        fraction = stage_progress / stage_total if stage_total else 0
+        progress = int(fraction * stage_weight + self.completed_weight)
+        self.progress_bar.setValue(progress)
+        self.arrow.setProgress(progress)
+
+        if message:
+            self.log_text.append(f"<span style='color: #95a5a6;'>→</span> {message}")
+
+        # Update completed_weight only when stage is done
+        if stage_progress >= stage_total:
+            self.completed_weight += stage_weight
+    
+    def start_conversion(self):
+        if not self.instance_path:
+            return
+        
+        # Disable UI during conversion
+        self.convert_btn.setEnabled(False)
+        self.drop_zone.setEnabled(False)
+        self.progress_bar.show()
+        self.progress_bar.setValue(0)
+        self.arrow.setProgress(0)
+        self.output_zone.setStatus("Converting...")
+        
+        # Clear log
+        self.log_text.clear()
+        self.log_text.append("<span style='color: #2ecc71; font-weight: bold;'>Starting conversion...</span>")
+        
+        # Create worker thread
+        self.signals = WorkerSignals()
+        self.signals.progress.connect(self.on_progress)
+        self.signals.log.connect(self.on_log)
+        self.signals.finished.connect(self.on_finished)
+        
+        def worker():
+            converter = MultiMCToMRPackConverter(self.signals)
+
+            # Extract if it's a zip
+            if self.instance_path.suffix.lower() == '.zip':
+                import tempfile
+                temp_dir = Path(tempfile.mkdtemp())
+                self.signals.log.emit("Extracting archive...")
+
+                with zipfile.ZipFile(self.instance_path, 'r') as zip_ref:
+                    for i, file in enumerate(zip_ref.infolist(), start=1):
+                        zip_ref.extract(file, temp_dir)
+                        progress = int(i / len(zip_ref.infolist()) * 20)  # 0–20% for extraction
+                        stage_weight = 20  # this stage represents 20% of total progress
+                        self.signals.progress.emit(i, len(zip_ref.infolist()), f"Extracted {i}/{len(zip_ref.infolist())} files", 20)
+
+
+                # Later, for conversion:
+                self.signals.progress.emit(0, 1, "Converting instance...", 80)
+
+                
+                # Use temp_dir as the instance root
+                instance_path = temp_dir
+            else:
+                instance_path = self.instance_path
+
+            self.signals.log.emit(f"Converting instance: {instance_path}")
+            success = converter.convert_instance(instance_path, self.output_path)
+            self.signals.finished.emit(success)
+        
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+            
+    def on_log(self, message):
+        self.log_text.append(f"<span style='color: #ecf0f1;'>•</span> {message}")
+        self.log_text.verticalScrollBar().setValue(
+            self.log_text.verticalScrollBar().maximum()
+        )
+    
+    def on_finished(self, success):
+        self.progress_bar.setValue(100)
+        self.arrow.setProgress(100)
+        
+        if success:
+            self.log_text.append("<span style='color: #2ecc71; font-weight: bold;'>✓ Conversion completed successfully!</span>")
+            self.output_zone.setStatus("Conversion Complete!", is_success=True)
+            
+            # Show success message with option to open folder
+            from PySide6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Success!")
+            msg.setText("Conversion completed successfully!")
+            msg.setInformativeText(f"MRPack saved to:\n{self.output_path}")
+            msg.setIcon(QMessageBox.Information)
+            msg.setStandardButtons(QMessageBox.Ok)
+            open_folder_btn = msg.addButton("Open Folder", QMessageBox.ActionRole)
+            msg.exec()
+            
+            if msg.clickedButton() == open_folder_btn:
+                import subprocess
+                import platform
+                
+                folder = self.output_path.parent
+                if platform.system() == 'Windows':
+                    os.startfile(folder)
+                elif platform.system() == 'Darwin':
+                    subprocess.Popen(['open', folder])
+                else:
+                    subprocess.Popen(['xdg-open', folder])
+        else:
+            self.log_text.append("<span style='color: #e74c3c; font-weight: bold;'>✗ Conversion failed!</span>")
+            self.output_zone.setStatus("Conversion Failed")
+            
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error", "Conversion failed! Check the log for details.")
+        
+        # Re-enable UI
+        self.convert_btn.setEnabled(True)
+        self.drop_zone.setEnabled(True)
+        
+        # Hide progress bar after a delay
+        QTimer.singleShot(2000, self.progress_bar.hide)
+
+
+def main():
+    app = QApplication(sys.argv)
+    
+    # Set application style
+    app.setStyle('Fusion')
+    
+    window = MainWindow()
+    window.show()
+    
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

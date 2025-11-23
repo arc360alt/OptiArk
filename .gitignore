@@ -5,3 +5,4 @@ logs
 .fabric
 cache
 usercache.json
+venv
