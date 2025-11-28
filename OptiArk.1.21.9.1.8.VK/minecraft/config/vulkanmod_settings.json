@@ -11,8 +11,9 @@
   "uniqueOpaqueLayer": true,
   "entityCulling": true,
   "device": 0,
-  "ambientOcclusion": 1,
+  "ambientOcclusion": 0,
   "frameQueueSize": 5,
   "builderThreads": 15,
-  "backFaceCulling": true
+  "backFaceCulling": true,
+  "textureAnimations": true
 }

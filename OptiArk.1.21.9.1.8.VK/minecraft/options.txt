@@ -1,6 +1,6 @@
 version:4554
 ao:false
-biomeBlendRadius:1
+biomeBlendRadius:0
 enableVsync:false
 entityDistanceScaling:1.0
 entityShadows:false

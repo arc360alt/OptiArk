@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
 MultiMC/Prism Launcher Instance to MRPack Converter
-Converts MultiMC/Prism Launcher instances to Modrinth modpack format (.mrpack)
-Supports CLI, TUI, and GUI modes
-
-Run with -gui tag in terminal to get a GUI
+Modern PySide6 GUI with drag-and-drop support
 """
 
 import json
@@ -17,121 +14,167 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import configparser
-import argparse
-from urllib.parse import urlparse
 import time
 import threading
 
-# GUI imports
-try:
-    import tkinter as tk
-    from tkinter import ttk, filedialog, messagebox, scrolledtext
-    GUI_AVAILABLE = True
-except ImportError:
-    GUI_AVAILABLE = False
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+                               QHBoxLayout, QLabel, QPushButton, QFileDialog,
+                               QTextEdit, QProgressBar, QFrame)
+from PySide6.QtCore import Qt, Signal, QObject, QPropertyAnimation, QEasingCurve, QTimer, QSize
+from PySide6.QtGui import (
+    QDragEnterEvent, QDropEvent, QPainter, QPainterPath,
+    QFont, QFontMetrics, QIcon, QPixmap
+)
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtWidgets import QFileIconProvider
+from PySide6.QtGui import QColor, QPen
 
-# TUI imports
-try:
-    import curses
-    TUI_AVAILABLE = True
-except ImportError:
-    TUI_AVAILABLE = False
+
+
+class WorkerSignals(QObject):
+    progress = Signal(int, int, str, int)  # add stage_weight
+    log = Signal(str)
+    finished = Signal(bool)
+
 
 class MultiMCToMRPackConverter:
-    def __init__(self, progress_callback=None, log_callback=None):
+    def __init__(self, signals=None):
+        self.signals = signals
         self.modrinth_api_base = "https://api.modrinth.com/v2"
         self.session = requests.Session()
+        self.completed_weight = 0
         self.session.headers.update({
             'User-Agent': 'MultiMC-MRPack-Converter/1.0'
         })
-        self.progress_callback = progress_callback
-        self.log_callback = log_callback
+        self.signals = signals
+        self.completed_weight = 0
         
     def log(self, message: str):
-        """Log a message"""
-        if self.log_callback:
-            self.log_callback(message)
+        if self.signals:
+            self.signals.log.emit(message)
         else:
             print(message)
     
-    def update_progress(self, current: int, total: int, message: str = ""):
-        """Update progress"""
-        if self.progress_callback:
-            self.progress_callback(current, total, message)
-        
+    def update_progress(self, current: int, total: int, message: str = "", stage_weight: int = 100):
+        if self.signals:
+            self.signals.progress.emit(current, total, message, stage_weight)
+
+
+    def get_minecraft_version_and_loader(self, config: Dict[str, Any]) -> (str, str):
+        minecraft_version = "1.21.10"  # default
+        loader = "minecraft"           # default
+
+        components = config.get("mmcpack.components", [])
+        for comp in components:
+            name = comp.get("cachedName", "").lower()
+            if name == "minecraft":
+                minecraft_version = comp.get("version") or comp.get("cachedVersion") or minecraft_version
+            elif "fabric" in name:
+                loader = "fabric"
+            elif "forge" in name:
+                loader = "forge"
+
+        return minecraft_version, loader
+
+
     def read_instance_config(self, instance_path: Path) -> Dict[str, Any]:
-        """Read MultiMC/Prism instance configuration"""
-        config_file = instance_path / "instance.cfg"
-        mmc_pack = instance_path / "mmc-pack.json"
-        
-        config = {}
-        
-        # Read instance.cfg
-        if config_file.exists():
-            parser = configparser.ConfigParser()
-            parser.read(config_file)
-            
-            for section in parser.sections():
-                for key, value in parser.items(section):
-                    config[f"{section}.{key}"] = value
-            
-            # Also read root level configs
-            if parser.has_section('General'):
-                for key, value in parser.items('General'):
-                    config[key] = value
-        
-        # Read mmc-pack.json if it exists (for exported instances)
-        if mmc_pack.exists():
-            with open(mmc_pack, 'r', encoding='utf-8') as f:
-                pack_data = json.load(f)
-                config.update(pack_data)
-        
-        return config
-    
+        """
+        Read a MultiMC/Prism/PolyMC instance configuration.
+        Accepts `instance_path` as the instance directory or instance.cfg file.
+        Merges mmc-pack.json keys under 'mmcpack.*'.
+        """
+        # Normalize: if instance.cfg is passed directly, use its parent
+        if instance_path.is_file() and instance_path.name == "instance.cfg":
+            cfg_path = instance_path
+            instance_dir = instance_path.parent
+        else:
+            cfg_path = instance_path / "instance.cfg"
+            instance_dir = instance_path
+
+        config: Dict[str, Any] = {}
+
+        # Read instance.cfg (existing logic)
+        if cfg_path.exists():
+            try:
+                current_section = None
+                with open(cfg_path, "r", encoding="utf-8", errors="ignore") as f:
+                    for raw in f:
+                        line = raw.strip()
+                        if not line or line.startswith(";") or line.startswith("#"):
+                            continue
+                        if line.startswith("[") and line.endswith("]"):
+                            current_section = line[1:-1].strip()
+                            continue
+                        if "=" in line:
+                            key, value = line.split("=", 1)
+                            key = key.strip()
+                            value = value.strip()
+                            if current_section:
+                                config[f"{current_section}.{key}"] = value
+                                if current_section.lower() == "general":
+                                    config[key] = value
+                            else:
+                                config[key] = value
+            except Exception as e:
+                self.log(f"Failed to parse instance.cfg: {e}")
+
+            # Merge mmc-pack.json from the root of the instance directory
+            mmc_pack_path = instance_dir / "mmc-pack.json"
+
+            # If not found at root, maybe zip contained a single folder, check first subfolder
+            if not mmc_pack_path.exists() or not mmc_pack_path.is_file():
+                subdirs = [d for d in instance_dir.iterdir() if d.is_dir()]
+                if len(subdirs) == 1:
+                    mmc_pack_path = subdirs[0] / "mmc-pack.json"
+
+            if mmc_pack_path.exists() and mmc_pack_path.is_file():
+                self.log(f"Found mmc-pack.json at: {mmc_pack_path}")
+                try:
+                    with open(mmc_pack_path, "r", encoding="utf-8") as f:
+                        pack_data = json.load(f)
+                        for k, v in pack_data.items():
+                            config[f"mmcpack.{k}"] = v  # prefix to avoid collisions
+                except Exception as e:
+                    self.log(f"Failed to read mmc-pack.json: {e}")
+            else:
+                self.log("mmc-pack.json not found in instance root or subfolder")
+
+            return config
+                
     def get_minecraft_version(self, config: Dict[str, Any]) -> str:
-        """Extract Minecraft version from instance config"""
         version_keys = [
             'IntendedVersion',
-            'MinecraftVersion', 
+            'MinecraftVersion',
             'minecraft_version',
             'General.IntendedVersion',
-            'General.MinecraftVersion'
+            'General.MinecraftVersion',
+            'mmcpack.minecraft_version',
+            'mmcpack.IntendedVersion'
         ]
         
         for key in version_keys:
             if key in config:
                 return str(config[key])
         
-        return "1.20.1"  # Default fallback
+        # fallback if all else fails
+        self.log("Could not detect Minecraft version, defaulting to 1.21.10")
+        return "1.21.10"
     
     def get_forge_version(self, config: Dict[str, Any]) -> Optional[str]:
-        """Extract Forge version if present"""
-        forge_keys = [
-            'ForgeVersion',
-            'forge_version', 
-            'General.ForgeVersion'
-        ]
-        
+        forge_keys = ['ForgeVersion', 'forge_version', 'General.ForgeVersion']
         for key in forge_keys:
             if key in config:
                 return str(config[key])
         return None
     
     def get_fabric_version(self, config: Dict[str, Any]) -> Optional[str]:
-        """Extract Fabric version if present"""
-        fabric_keys = [
-            'FabricLoaderVersion',
-            'fabric_version',
-            'General.FabricLoaderVersion'
-        ]
-        
+        fabric_keys = ['FabricLoaderVersion', 'fabric_version', 'General.FabricLoaderVersion']
         for key in fabric_keys:
             if key in config:
                 return str(config[key])
         return None
     
     def calculate_file_hash(self, file_path: Path) -> Dict[str, str]:
-        """Calculate SHA1 and SHA512 hashes for a file"""
         sha1 = hashlib.sha1()
         sha512 = hashlib.sha512()
         
@@ -140,15 +183,10 @@ class MultiMCToMRPackConverter:
                 sha1.update(chunk)
                 sha512.update(chunk)
         
-        return {
-            'sha1': sha1.hexdigest(),
-            'sha512': sha512.hexdigest()
-        }
+        return {'sha1': sha1.hexdigest(), 'sha512': sha512.hexdigest()}
     
     def search_modrinth_mod(self, filename: str, file_hash: str) -> Optional[Dict[str, Any]]:
-        """Search for a mod on Modrinth by filename and hash"""
         try:
-            # First try to find by hash
             response = self.session.get(
                 f"{self.modrinth_api_base}/version_file/{file_hash}?algorithm=sha1"
             )
@@ -156,15 +194,10 @@ class MultiMCToMRPackConverter:
             if response.status_code == 200:
                 return response.json()
             
-            # If hash search fails, try searching by filename
             search_query = filename.replace('.jar', '').replace('_', ' ').replace('-', ' ')
             response = self.session.get(
                 f"{self.modrinth_api_base}/search",
-                params={
-                    'query': search_query,
-                    'limit': 5,
-                    'facets': '[["project_type:mod"]]'
-                }
+                params={'query': search_query, 'limit': 5, 'facets': '[["project_type:mod"]]'}
             )
             
             if response.status_code == 200:
@@ -181,7 +214,7 @@ class MultiMCToMRPackConverter:
                                 if file['filename'].lower() == filename.lower():
                                     return version
             
-            time.sleep(0.1)  # Rate limiting
+            time.sleep(0.1)
             return None
             
         except Exception as e:
@@ -189,7 +222,6 @@ class MultiMCToMRPackConverter:
             return None
     
     def process_mods_directory(self, mods_path: Path, minecraft_version: str) -> List[Dict[str, Any]]:
-        """Process mods directory and create mod entries for mrpack"""
         mod_entries = []
         
         if not mods_path.exists():
@@ -202,15 +234,12 @@ class MultiMCToMRPackConverter:
             self.log(f"Processing mod: {mod_file.name}")
             self.update_progress(i, total_mods, f"Processing {mod_file.name}")
             
-            # Calculate file hash
             hashes = self.calculate_file_hash(mod_file)
             file_size = mod_file.stat().st_size
             
-            # Search for mod on Modrinth
             modrinth_data = self.search_modrinth_mod(mod_file.name, hashes['sha1'])
             
             if modrinth_data:
-                # Found on Modrinth - use download URL
                 primary_file = None
                 for file in modrinth_data['files']:
                     if file['primary']:
@@ -226,10 +255,7 @@ class MultiMCToMRPackConverter:
                         "sha1": primary_file['hashes']['sha1'],
                         "sha512": primary_file['hashes']['sha512']
                     },
-                    "env": {
-                        "client": "required",
-                        "server": "required"
-                    },
+                    "env": {"client": "required", "server": "required"},
                     "downloads": [primary_file['url']],
                     "fileSize": primary_file['size']
                 }
@@ -239,35 +265,49 @@ class MultiMCToMRPackConverter:
                 self.log(f"  Not found on Modrinth, will include as override: {mod_file.name}")
         
         return mod_entries
-    
+
     def create_mrpack_index(self, instance_path: Path, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Create the modrinth.index.json structure"""
-        minecraft_version = self.get_minecraft_version(config)
-        forge_version = self.get_forge_version(config)
-        fabric_version = self.get_fabric_version(config)
-        
-        # Determine loader
-        if forge_version:
-            loader = "forge"
-            loader_version = forge_version
-        elif fabric_version:
-            loader = "fabric"
-            loader_version = fabric_version
-        else:
-            loader = "minecraft"
-            loader_version = minecraft_version
-        
-        # Process mods
+        minecraft_version, loader = self.get_minecraft_version_and_loader(config)
+        loader_version = None
+
+        # Only set loader_version if not vanilla
+        if loader == "fabric":
+            # Look for fabric loader version in components by uid
+            components = config.get("mmcpack.components", [])
+            for comp in components:
+                uid = comp.get("uid", "")
+                if uid == "net.fabricmc.fabric-loader":
+                    loader_version = comp.get("version") or comp.get("cachedVersion")
+                    if loader_version:
+                        loader_version = str(loader_version)
+                    break
+            if not loader_version:
+                self.log("Warning: Could not find Fabric Loader version, using default")
+                loader_version = "0.15.11"  # fallback version
+        elif loader == "forge":
+            # Look for forge version in components by uid
+            components = config.get("mmcpack.components", [])
+            for comp in components:
+                uid = comp.get("uid", "")
+                if "forge" in uid.lower():
+                    loader_version = comp.get("version") or comp.get("cachedVersion")
+                    if loader_version:
+                        loader_version = str(loader_version)
+                    break
+            if not loader_version:
+                self.log("Warning: Could not find Forge version, using default")
+                loader_version = "47.2.0"  # fallback version
+
+        # Mods path
         mods_path = instance_path / "minecraft" / "mods"
         if not mods_path.exists():
             mods_path = instance_path / "mods"
-        
+
         mod_files = self.process_mods_directory(mods_path, minecraft_version)
-        
-        # Get instance name
+
         name = config.get('name', config.get('General.name', instance_path.name))
         summary = f"Converted from MultiMC/Prism instance: {name}"
-        
+
         mrpack_index = {
             "formatVersion": 1,
             "game": "minecraft",
@@ -275,23 +315,20 @@ class MultiMCToMRPackConverter:
             "name": name,
             "summary": summary,
             "files": mod_files,
-            "dependencies": {
-                "minecraft": minecraft_version
-            }
+            "dependencies": {"minecraft": minecraft_version}
         }
-        
-        # Add loader dependency
-        if loader != "minecraft":
-            mrpack_index["dependencies"][loader] = loader_version
-        
+
+        if loader == "fabric":
+            mrpack_index["dependencies"]["fabric-loader"] = loader_version
+        elif loader == "forge":
+            mrpack_index["dependencies"]["forge"] = loader_version
+
         return mrpack_index
     
     def copy_overrides(self, instance_path: Path, temp_dir: Path):
-        """Copy non-Modrinth files to overrides directory"""
         overrides_dir = temp_dir / "overrides"
         overrides_dir.mkdir(exist_ok=True)
         
-        # Copy minecraft directory contents (excluding mods that are on Modrinth)
         minecraft_dir = instance_path / "minecraft"
         if not minecraft_dir.exists():
             minecraft_dir = instance_path
@@ -299,7 +336,6 @@ class MultiMCToMRPackConverter:
         for item in minecraft_dir.iterdir():
             if item.name in ['.minecraft', 'mods']:
                 if item.name == 'mods':
-                    # Only copy mods that weren't found on Modrinth
                     mods_override_dir = overrides_dir / "mods"
                     mods_override_dir.mkdir(exist_ok=True)
                     
@@ -318,12 +354,10 @@ class MultiMCToMRPackConverter:
                 shutil.copy2(item, overrides_dir)
     
     def convert_instance(self, instance_path: Path, output_path: Path) -> bool:
-        """Convert a MultiMC/Prism instance to mrpack format"""
         try:
             self.log(f"Converting instance: {instance_path}")
             self.update_progress(0, 100, "Starting conversion...")
             
-            # Read instance configuration
             config = self.read_instance_config(instance_path)
             if not config:
                 self.log("Error: Could not read instance configuration")
@@ -331,29 +365,25 @@ class MultiMCToMRPackConverter:
             
             self.update_progress(10, 100, "Reading configuration...")
             
-            # Create temporary directory
             import tempfile
             with tempfile.TemporaryDirectory() as temp_dir:
                 temp_path = Path(temp_dir)
                 
-                # Create mrpack index
                 self.log("Creating modrinth.index.json...")
                 self.update_progress(20, 100, "Creating index...")
                 mrpack_index = self.create_mrpack_index(instance_path, config)
                 
-                # Write index file
                 index_path = temp_path / "modrinth.index.json"
                 with open(index_path, 'w', encoding='utf-8') as f:
                     json.dump(mrpack_index, f, indent=2, ensure_ascii=False)
                 
                 self.update_progress(80, 100, "Copying overrides...")
-                # Copy overrides
                 self.log("Copying override files...")
                 self.copy_overrides(instance_path, temp_path)
                 
-                # Create mrpack zip file
                 self.update_progress(90, 100, "Creating mrpack...")
                 self.log(f"Creating mrpack: {output_path}")
+                import zipfile
                 with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for file_path in temp_path.rglob('*'):
                         if file_path.is_file():
@@ -369,411 +399,517 @@ class MultiMCToMRPackConverter:
             return False
 
 
-class TUIAPP:
-    def __init__(self, stdscr):
-        self.stdscr = stdscr
-        self.height, self.width = stdscr.getmaxyx()
-        curses.curs_set(0)
-        curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_BLUE)
-        curses.init_pair(2, curses.COLOR_BLACK, curses.COLOR_WHITE)
-        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
-        curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)
-        
-    def draw_box(self, y, x, h, w, title=""):
-        """Draw a box with optional title"""
-        for i in range(h):
-            for j in range(w):
-                if i == 0 or i == h-1:
-                    char = "─"
-                elif j == 0 or j == w-1:
-                    char = "│"
-                else:
-                    char = " "
-                    
-                if i == 0 and j == 0:
-                    char = "┌"
-                elif i == 0 and j == w-1:
-                    char = "┐"
-                elif i == h-1 and j == 0:
-                    char = "└"
-                elif i == h-1 and j == w-1:
-                    char = "┘"
-                    
-                try:
-                    self.stdscr.addch(y + i, x + j, char)
-                except curses.error:
-                    pass
-                    
-        if title:
-            title_x = x + (w - len(title)) // 2
-            try:
-                self.stdscr.addstr(y, title_x, f" {title} ", curses.color_pair(1))
-            except curses.error:
-                pass
-    
-    def get_input(self, prompt, y, x):
-        """Get user input"""
-        curses.curs_set(1)
-        self.stdscr.addstr(y, x, prompt)
-        self.stdscr.refresh()
-        
-        input_str = ""
-        while True:
-            ch = self.stdscr.getch()
-            if ch == 10 or ch == 13:  # Enter
-                break
-            elif ch == 27:  # Escape
-                input_str = ""
-                break
-            elif ch == curses.KEY_BACKSPACE or ch == 127:
-                if input_str:
-                    input_str = input_str[:-1]
-                    self.stdscr.addstr(y, x + len(prompt), " " * 50)
-                    self.stdscr.addstr(y, x + len(prompt), input_str)
-            elif 32 <= ch <= 126:  # Printable characters
-                input_str += chr(ch)
-                self.stdscr.addstr(y, x + len(prompt), input_str)
-            
-            self.stdscr.refresh()
-        
-        curses.curs_set(0)
-        return input_str
-    
-    def show_progress(self, current, total, message):
-        """Show progress bar"""
-        if total == 0:
+from PySide6.QtWidgets import QWidget
+from PySide6.QtGui import QPixmap, QPainter
+from PySide6.QtCore import Qt, QRect, QSize
+import os
+
+class AnimatedArrow(QWidget):
+    def __init__(self, parent=None, image_file="arrow.png"):
+        super().__init__(parent)
+        self.progress = 0  # 0-100
+        self.completed_weight = 0
+
+        # Load the image relative to this script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.pixmap = QPixmap(os.path.join(script_dir, image_file))
+
+        if self.pixmap.isNull():
+            print(f"Warning: Could not load '{image_file}'")
+
+        self.setMinimumSize(100, 100)  # Minimum size for layout
+        self.completed_weight = 0 
+
+    def setProgress(self, progress: int):
+        """progress: 0-100"""
+        self.progress = max(0, min(100, progress))
+        self.update()
+
+    def paintEvent(self, event):
+        if self.pixmap.isNull():
             return
-            
-        progress_y = self.height // 2 + 3
-        bar_width = min(50, self.width - 20)
-        filled = int((current / total) * bar_width)
-        
-        # Clear progress area
-        self.stdscr.addstr(progress_y, 10, " " * (self.width - 20))
-        self.stdscr.addstr(progress_y + 1, 10, " " * (self.width - 20))
-        
-        # Draw progress bar
-        bar = "█" * filled + "░" * (bar_width - filled)
-        self.stdscr.addstr(progress_y, 10, f"Progress: [{bar}] {current}/{total}")
-        self.stdscr.addstr(progress_y + 1, 10, message[:self.width-20])
-        self.stdscr.refresh()
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+
+        widget_width = self.width()
+        widget_height = self.height()
+
+        # Maintain aspect ratio
+        pixmap_ratio = self.pixmap.width() / self.pixmap.height()
+        widget_ratio = widget_width / widget_height
+
+        if pixmap_ratio > widget_ratio:
+            draw_width = widget_width
+            draw_height = int(widget_width / pixmap_ratio)
+        else:
+            draw_height = widget_height
+            draw_width = int(widget_height * pixmap_ratio)
+
+        # Center in widget
+        x_offset = (widget_width - draw_width) // 2
+        y_offset = (widget_height - draw_height) // 2
+
+        # Reveal width based on progress
+        reveal_width = int((self.progress / 100) * self.pixmap.width())
+
+        if reveal_width > 0:
+            src_rect = QRect(0, 0, reveal_width, self.pixmap.height())
+            dst_rect = QRect(x_offset, y_offset, int((reveal_width / self.pixmap.width()) * draw_width), draw_height)
+            painter.drawPixmap(dst_rect, self.pixmap, src_rect)
+
+class DropZone(QFrame):
+    fileDropped = Signal(str)
     
-    def log_message(self, message):
-        """Add message to log area"""
-        # Simple implementation - could be enhanced with scrolling
-        pass
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+        self.has_file = False
+        self.file_path = ""
+        self.file_icon = None
+        self.completed_weight = 0
+        
+        self.setMinimumSize(280, 280)
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #4d4d4d;
+                border-color: #2980b9;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        self.icon_label = QLabel()
+        self.icon_label.setAlignment(Qt.AlignCenter)
+        self.icon_label.setMinimumSize(128, 128)
+        
+        self.text_label = QLabel("Drag your OptiArk .zip here\n(or any other MMC zip)\n\nOr click to open your file explorer")
+        self.text_label.setAlignment(Qt.AlignCenter)
+        self.text_label.setWordWrap(True)
+        self.text_label.setStyleSheet("color: #6c757d; font-size: 14px;")
+        
+        self.filename_label = QLabel()
+        self.filename_label.setAlignment(Qt.AlignCenter)
+        self.filename_label.setStyleSheet("color: #d9d9d9; font-size: 13px; font-weight: bold;")
+        self.filename_label.hide()
+        
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.text_label)
+        layout.addWidget(self.filename_label)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            self.setStyleSheet("""
+                DropZone {
+                    background-color: #d4edff;
+                    border: 3px dashed #2980b9;
+                    border-radius: 20px;
+                }
+            """)
     
-    def run(self):
-        """Run the TUI application"""
-        while True:
-            self.stdscr.clear()
-            
-            # Draw title
-            title = "MultiMC/Prism to MRPack Converter"
-            self.stdscr.addstr(2, (self.width - len(title)) // 2, title, curses.color_pair(1) | curses.A_BOLD)
-            
-            # Draw main box
-            box_height = self.height - 6
-            box_width = self.width - 4
-            self.draw_box(4, 2, box_height, box_width, "Converter")
-            
-            # Instructions
-            instructions = [
-                "1. Enter the path to your MultiMC/Prism instance",
-                "2. Choose output location (optional)",
-                "3. Press Enter to convert",
-                "",
-                "Press 'q' to quit"
-            ]
-            
-            for i, instruction in enumerate(instructions):
-                self.stdscr.addstr(6 + i, 4, instruction)
-            
-            # Get instance path
-            instance_path = self.get_input("Instance path: ", 12, 4)
-            if not instance_path:
-                continue
-                
-            instance_path = Path(instance_path)
-            if not instance_path.exists():
-                self.stdscr.addstr(14, 4, "Error: Path does not exist!", curses.color_pair(4))
-                self.stdscr.addstr(15, 4, "Press any key to continue...")
-                self.stdscr.getch()
-                continue
-            
-            if not (instance_path / "instance.cfg").exists():
-                self.stdscr.addstr(14, 4, "Error: Not a valid instance!", curses.color_pair(4))
-                self.stdscr.addstr(15, 4, "Press any key to continue...")
-                self.stdscr.getch()
-                continue
-            
-            # Get output path
-            output_path = self.get_input("Output path (optional): ", 13, 4)
-            if not output_path:
-                output_path = instance_path.parent / f"{instance_path.name}.mrpack"
-            else:
-                output_path = Path(output_path)
-            
-            # Convert
-            self.stdscr.addstr(15, 4, "Converting...")
-            self.stdscr.refresh()
-            
-            converter = MultiMCToMRPackConverter(
-                progress_callback=self.show_progress,
-                log_callback=self.log_message
-            )
-            
-            success = converter.convert_instance(instance_path, output_path)
-            
-            if success:
-                self.stdscr.addstr(self.height - 4, 4, "Conversion successful!", curses.color_pair(3))
-                self.stdscr.addstr(self.height - 3, 4, f"Saved to: {output_path}")
-            else:
-                self.stdscr.addstr(self.height - 4, 4, "Conversion failed!", curses.color_pair(4))
-            
-            self.stdscr.addstr(self.height - 2, 4, "Press any key to continue or 'q' to quit...")
-            ch = self.stdscr.getch()
-            if ch == ord('q'):
-                break
+    def dragLeaveEvent(self, event):
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #e9ecef;
+                border-color: #2980b9;
+            }
+        """)
+    
+    def dropEvent(self, event: QDropEvent):
+        files = [u.toLocalFile() for u in event.mimeData().urls()]
+        if files:
+            self.setFile(files[0])
+            self.fileDropped.emit(files[0])
+        
+        self.dragLeaveEvent(None)
+    
+    def mousePressEvent(self, event):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Instance Archive",
+            "",
+            "Archive Files (*.zip);;All Files (*.*)"
+        )
+        if file_path:
+            self.setFile(file_path)
+            self.fileDropped.emit(file_path)
+    
+    def setFile(self, file_path):
+        self.has_file = True
+        self.file_path = file_path
+        
+        # Get file icon
+        file_info = Path(file_path)
+        icon_provider = QFileIconProvider()
+        icon = icon_provider.icon(QFileIconProvider.File)
+        
+        # Set large icon
+        pixmap = icon.pixmap(QSize(96, 96))
+        self.icon_label.setPixmap(pixmap)
+        
+        # Show filename
+        self.filename_label.setText(file_info.name)
+        self.filename_label.show()
+        self.text_label.hide()
+        
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #526b7d;
+                border: 3px solid #2980b9;
+                border-radius: 20px;
+            }
+        """)
+    
+    def reset(self):
+        self.has_file = False
+        self.file_path = ""
+        self.icon_label.clear()
+        self.filename_label.hide()
+        self.text_label.show()
+        self.setStyleSheet("""
+            DropZone {
+                background-color: #212121;
+                border: 3px dashed #3498db;
+                border-radius: 20px;
+            }
+            DropZone:hover {
+                background-color: #e9ecef;
+                border-color: #2980b9;
+            }
+        """)
 
 
-class GUIAPP:
+class OutputZone(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(280, 280)
+        self.completed_weight = 0
+        self.setStyleSheet("""
+            OutputZone {
+                background-color: #212121;
+                border: 3px solid #95a5a6;
+                border-radius: 20px;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+        
+        self.label = QLabel("Output")
+        self.label.setAlignment(Qt.AlignCenter)
+        self.label.setStyleSheet("color: #d9d9d9; font-size: 48px; font-weight: bold;")
+        
+        self.status_label = QLabel("Ready to convert")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("color: #7f8c8d; font-size: 14px;")
+        
+        layout.addWidget(self.label)
+        layout.addWidget(self.status_label)
+        
+        self.setLayout(layout)
+    
+    def setStatus(self, status, is_success=False):
+        self.status_label.setText(status)
+        if is_success:
+            self.setStyleSheet("""
+                OutputZone {
+                    background-color: #212121;
+                    border: 3px solid #27ae60;
+                    border-radius: 20px;
+                }
+            """)
+            self.status_label.setStyleSheet("color: #27ae60; font-size: 14px; font-weight: bold;")
+        else:
+            self.setStyleSheet("""
+                OutputZone {
+                    background-color: #212121;
+                    border: 3px solid #95a5a6;
+                    border-radius: 20px;
+                }
+            """)
+            self.status_label.setStyleSheet("color: #7f8c8d; font-size: 14px;")
+
+
+class MainWindow(QMainWindow):
     def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("MultiMC/Prism to MRPack Converter")
-        self.root.geometry("700x600")
-        self.root.resizable(True, True)
+        super().__init__()
+        self.instance_path = None
+        self.output_path = None
+        self.completed_weight = 0
         
-        # Variables
-        self.instance_path = tk.StringVar()
-        self.output_path = tk.StringVar()
+        self.setWindowTitle("OptiArk Pack Converter")
+        self.setMinimumSize(900, 700)
         
-        self.create_widgets()
+        # Main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
         
-    def create_widgets(self):
-        """Create GUI widgets"""
-        # Main frame
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(5, weight=1)
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(40, 40, 40, 40)
+        main_widget.setLayout(main_layout)
         
         # Title
-        title_label = ttk.Label(main_frame, text="MultiMC/Prism to MRPack Converter", 
-                               font=("Arial", 16, "bold"))
-        title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
+        title = QLabel("OptiArk Pack Converter")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 36px; font-weight: bold; color: #d9d9d9; margin-bottom: 10px;")
+        main_layout.addWidget(title)
         
-        # Instance path selection
-        ttk.Label(main_frame, text="Instance Path:").grid(row=1, column=0, sticky=tk.W, pady=5)
-        instance_entry = ttk.Entry(main_frame, textvariable=self.instance_path, width=50)
-        instance_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 5))
-        ttk.Button(main_frame, text="Browse", 
-                  command=self.browse_instance).grid(row=1, column=2, pady=5)
+        # Subtitle
+        subtitle = QLabel("Reminder: this works for any MultiMC pack, but this is specifically made for OptiArk")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setStyleSheet("font-size: 13px; color: #7f8c8d; margin-bottom: 20px;")
+        main_layout.addWidget(subtitle)
         
-        # Output path selection
-        ttk.Label(main_frame, text="Output Path:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        output_entry = ttk.Entry(main_frame, textvariable=self.output_path, width=50)
-        output_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=(5, 5))
-        ttk.Button(main_frame, text="Browse", 
-                  command=self.browse_output).grid(row=2, column=2, pady=5)
+        # Drop zones layout
+        zones_layout = QHBoxLayout()
+        zones_layout.setSpacing(30)
+        
+        # Input drop zone
+        self.drop_zone = DropZone()
+        self.drop_zone.fileDropped.connect(self.on_file_dropped)
+        zones_layout.addWidget(self.drop_zone)
+        
+        # Animated arrow
+        self.arrow = AnimatedArrow()
+        zones_layout.addWidget(self.arrow)
+        
+        # Output zone
+        self.output_zone = OutputZone()
+        zones_layout.addWidget(self.output_zone)
+        
+        main_layout.addLayout(zones_layout)
         
         # Convert button
-        self.convert_button = ttk.Button(main_frame, text="Convert to MRPack", 
-                                        command=self.start_conversion)
-        self.convert_button.grid(row=3, column=0, columnspan=3, pady=20)
+        self.convert_btn = QPushButton("Convert to MRPack")
+        self.convert_btn.setEnabled(False)
+        self.convert_btn.setMinimumHeight(50)
+        self.convert_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 10px;
+                font-size: 16px;
+                font-weight: bold;
+                padding: 10px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+            QPushButton:pressed {
+                background-color: #21618c;
+            }
+            QPushButton:disabled {
+                background-color: #2e2e2e;
+            }
+        """)
+        self.convert_btn.clicked.connect(self.start_conversion)
+        main_layout.addWidget(self.convert_btn)
         
         # Progress bar
-        self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Progressbar(main_frame, variable=self.progress_var, 
-                                           maximum=100, length=400)
-        self.progress_bar.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumHeight(30)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #bdc3c7;
+                border-radius: 10px;
+                text-align: center;
+                background-color: #ecf0f1;
+                color: #666666;
+                font-weight: bold;
+            }
+            QProgressBar::chunk {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                                  stop:0 #3498db, stop:1 #2ecc71);
+                border-radius: 8px;
+            }
+        """)
+        self.progress_bar.hide()
+        main_layout.addWidget(self.progress_bar)
         
         # Log area
-        log_frame = ttk.LabelFrame(main_frame, text="Log", padding="5")
-        log_frame.grid(row=5, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
+        log_label = QLabel("Conversion Log:")
+        log_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #d9d9d9; margin-top: 10px;")
+        main_layout.addWidget(log_label)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=15, width=70)
-        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMaximumHeight(150)
+        self.log_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #666666;
+                color: #ecf0f1;
+                border: 2px solid #34495e;
+                border-radius: 10px;
+                padding: 10px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+            }
+        """)
+        main_layout.addWidget(self.log_text)
         
-    def browse_instance(self):
-        """Browse for instance directory"""
-        directory = filedialog.askdirectory(title="Select MultiMC/Prism Instance Directory")
-        if directory:
-            self.instance_path.set(directory)
-            # Auto-generate output path
-            if not self.output_path.get():
-                output = Path(directory).parent / f"{Path(directory).name}.mrpack"
-                self.output_path.set(str(output))
+        # Set window style
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #1f1f1f;
+            }
+        """)
     
-    def browse_output(self):
-        """Browse for output file"""
-        filename = filedialog.asksaveasfilename(
-            title="Save MRPack As",
-            defaultextension=".mrpack",
-            filetypes=[("MRPack files", "*.mrpack"), ("All files", "*.*")]
-        )
-        if filename:
-            self.output_path.set(filename)
-    
-    def log_message(self, message):
-        """Add message to log"""
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.root.update_idletasks()
-    
-    def update_progress(self, current, total, message=""):
-        """Update progress bar"""
-        if total > 0:
-            progress = (current / total) * 100
-            self.progress_var.set(progress)
+    def on_file_dropped(self, file_path):
+        self.instance_path = Path(file_path)
+        self.convert_btn.setEnabled(True)
+        self.log_text.append(f"<span style='color: #3498db;'>✓</span> File selected: {self.instance_path.name}")
+        
+        # Auto-generate output path
+        self.output_path = self.instance_path.parent / f"{self.instance_path.stem}.mrpack"
+        self.log_text.append(f"<span style='color: #95a5a6;'>→</span> Output will be: {self.output_path.name}")
+
+    def on_progress(self, stage_progress, stage_total, message, stage_weight):
+        fraction = stage_progress / stage_total if stage_total else 0
+        progress = int(fraction * stage_weight + self.completed_weight)
+        self.progress_bar.setValue(progress)
+        self.arrow.setProgress(progress)
+
         if message:
-            self.log_message(message)
-        self.root.update_idletasks()
-    
-    def conversion_worker(self, instance_path, output_path):
-        """Worker thread for conversion"""
-        try:
-            converter = MultiMCToMRPackConverter(
-                progress_callback=self.update_progress,
-                log_callback=self.log_message
-            )
-            
-            success = converter.convert_instance(instance_path, output_path)
-            
-            if success:
-                self.root.after(0, lambda: messagebox.showinfo("Success", 
-                    f"Conversion completed successfully!\nSaved to: {output_path}"))
-            else:
-                self.root.after(0, lambda: messagebox.showerror("Error", 
-                    "Conversion failed! Check the log for details."))
-                    
-        except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Conversion failed: {e}"))
-        finally:
-            self.root.after(0, lambda: self.convert_button.config(state="normal"))
+            self.log_text.append(f"<span style='color: #95a5a6;'>→</span> {message}")
+
+        # Update completed_weight only when stage is done
+        if stage_progress >= stage_total:
+            self.completed_weight += stage_weight
     
     def start_conversion(self):
-        """Start the conversion process"""
-        instance_path_str = self.instance_path.get()
-        output_path_str = self.output_path.get()
-        
-        if not instance_path_str:
-            messagebox.showerror("Error", "Please select an instance directory")
+        if not self.instance_path:
             return
         
-        if not output_path_str:
-            messagebox.showerror("Error", "Please specify an output path")
-            return
+        # Disable UI during conversion
+        self.convert_btn.setEnabled(False)
+        self.drop_zone.setEnabled(False)
+        self.progress_bar.show()
+        self.progress_bar.setValue(0)
+        self.arrow.setProgress(0)
+        self.output_zone.setStatus("Converting...")
         
-        instance_path = Path(instance_path_str)
-        output_path = Path(output_path_str)
+        # Clear log
+        self.log_text.clear()
+        self.log_text.append("<span style='color: #2ecc71; font-weight: bold;'>Starting conversion...</span>")
         
-        if not instance_path.exists():
-            messagebox.showerror("Error", "Instance directory does not exist")
-            return
+        # Create worker thread
+        self.signals = WorkerSignals()
+        self.signals.progress.connect(self.on_progress)
+        self.signals.log.connect(self.on_log)
+        self.signals.finished.connect(self.on_finished)
         
-        if not (instance_path / "instance.cfg").exists():
-            messagebox.showerror("Error", "Not a valid MultiMC/Prism instance")
-            return
+        def worker():
+            converter = MultiMCToMRPackConverter(self.signals)
+
+            # Extract if it's a zip
+            if self.instance_path.suffix.lower() == '.zip':
+                import tempfile
+                temp_dir = Path(tempfile.mkdtemp())
+                self.signals.log.emit("Extracting archive...")
+
+                with zipfile.ZipFile(self.instance_path, 'r') as zip_ref:
+                    for i, file in enumerate(zip_ref.infolist(), start=1):
+                        zip_ref.extract(file, temp_dir)
+                        progress = int(i / len(zip_ref.infolist()) * 20)  # 0–20% for extraction
+                        stage_weight = 20  # this stage represents 20% of total progress
+                        self.signals.progress.emit(i, len(zip_ref.infolist()), f"Extracted {i}/{len(zip_ref.infolist())} files", 20)
+
+
+                # Later, for conversion:
+                self.signals.progress.emit(0, 1, "Converting instance...", 80)
+
+                
+                # Use temp_dir as the instance root
+                instance_path = temp_dir
+            else:
+                instance_path = self.instance_path
+
+            self.signals.log.emit(f"Converting instance: {instance_path}")
+            success = converter.convert_instance(instance_path, self.output_path)
+            self.signals.finished.emit(success)
         
-        # Disable button and start conversion in thread
-        self.convert_button.config(state="disabled")
-        self.log_text.delete(1.0, tk.END)
-        self.progress_var.set(0)
-        
-        thread = threading.Thread(target=self.conversion_worker, 
-                                args=(instance_path, output_path))
-        thread.daemon = True
+        thread = threading.Thread(target=worker, daemon=True)
         thread.start()
+            
+    def on_log(self, message):
+        self.log_text.append(f"<span style='color: #ecf0f1;'>•</span> {message}")
+        self.log_text.verticalScrollBar().setValue(
+            self.log_text.verticalScrollBar().maximum()
+        )
     
-    def run(self):
-        """Run the GUI application"""
-        self.root.mainloop()
-
-
-def run_tui():
-    """Run TUI mode"""
-    if not TUI_AVAILABLE:
-        print("TUI not available. Install curses module.")
-        return
-    
-    try:
-        curses.wrapper(lambda stdscr: TUIAPP(stdscr).run())
-    except KeyboardInterrupt:
-        pass
-
-def run_gui():
-    """Run GUI mode"""
-    if not GUI_AVAILABLE:
-        print("GUI not available. Install tkinter module.")
-        return
-    
-    app = GUIAPP()
-    app.run()
-
-def main():
-    parser = argparse.ArgumentParser(description='Convert MultiMC/Prism Launcher instances to MRPack format')
-    parser.add_argument('instance_path', nargs='?', help='Path to MultiMC/Prism instance directory')
-    parser.add_argument('-o', '--output', help='Output mrpack file path')
-    parser.add_argument('--gui', action='store_true', help='Run GUI mode')
-    parser.add_argument('--tui', action='store_true', help='Run TUI mode')
-    
-    args = parser.parse_args()
-    
-    # GUI mode
-    if args.gui:
-        run_gui()
-        return
-    
-    # TUI mode
-    if args.tui:
-        run_tui()
-        return
-    
-    # CLI mode
-    if not args.instance_path:
-        print("Usage: python script.py <instance_path> [-o output] [--gui] [--tui]")
-        print("Or run with --gui or --tui for interactive modes")
-        sys.exit(1)
-        
-        instance_path = Path(args.instance_path)
-        if not instance_path.exists():
-            print(f"Error: Instance path does not exist: {instance_path}")
-            sys.exit(1)
-        
-        if not (instance_path / "instance.cfg").exists():
-            print(f"Error: Not a valid MultiMC/Prism instance (missing instance.cfg)")
-            sys.exit(1)
-        
-        # Determine output path
-        if args.output:
-            output_path = Path(args.output)
-        else:
-            output_path = instance_path.parent / f"{instance_path.name}.mrpack"
-        
-        # Ensure output directory exists
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Convert instance
-        converter = MultiMCToMRPackConverter()
-        success = converter.convert_instance(instance_path, output_path)
+    def on_finished(self, success):
+        self.progress_bar.setValue(100)
+        self.arrow.setProgress(100)
         
         if success:
-            print(f"\nConversion completed successfully!")
-            print(f"MRPack saved to: {output_path}")
-            print(f"You can now upload this file to Modrinth or use it with compatible launchers.")
+            self.log_text.append("<span style='color: #2ecc71; font-weight: bold;'>✓ Conversion completed successfully!</span>")
+            self.output_zone.setStatus("Conversion Complete!", is_success=True)
+            
+            # Show success message with option to open folder
+            from PySide6.QtWidgets import QMessageBox
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Success!")
+            msg.setText("Conversion completed successfully!")
+            msg.setInformativeText(f"MRPack saved to:\n{self.output_path}")
+            msg.setIcon(QMessageBox.Information)
+            msg.setStandardButtons(QMessageBox.Ok)
+            open_folder_btn = msg.addButton("Open Folder", QMessageBox.ActionRole)
+            msg.exec()
+            
+            if msg.clickedButton() == open_folder_btn:
+                import subprocess
+                import platform
+                
+                folder = self.output_path.parent
+                if platform.system() == 'Windows':
+                    os.startfile(folder)
+                elif platform.system() == 'Darwin':
+                    subprocess.Popen(['open', folder])
+                else:
+                    subprocess.Popen(['xdg-open', folder])
         else:
-            print("Conversion failed!")
-            sys.exit(1)
-        return
+            self.log_text.append("<span style='color: #e74c3c; font-weight: bold;'>✗ Conversion failed!</span>")
+            self.output_zone.setStatus("Conversion Failed")
+            
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Error", "Conversion failed! Check the log for details.")
+        
+        # Re-enable UI
+        self.convert_btn.setEnabled(True)
+        self.drop_zone.setEnabled(True)
+        
+        # Hide progress bar after a delay
+        QTimer.singleShot(2000, self.progress_bar.hide)
+
+
+def main():
+    app = QApplication(sys.argv)
     
-    # Default to GUI mode if no specific mode is chosen
-    run_gui()
+    # Set application style
+    app.setStyle('Fusion')
+    
+    window = MainWindow()
+    window.show()
+    
+    sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
