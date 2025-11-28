@@ -122,7 +122,7 @@ jobs:
         asset_name: converter-${{ runner.os }}-${{ matrix.executable_name }}
         asset_content_type: application/octet-stream
 
-create-combined-release:
+  create-combined-release:
     needs: build
     runs-on: ubuntu-latest
     steps:
