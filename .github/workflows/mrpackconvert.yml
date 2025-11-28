@@ -13,9 +13,13 @@ on:
       - 'mmcpackconverter/converter.py'
       - 'mmcpackconverter/arrow.png'
       - '.github/workflows/build.yml'
-  release:
-    types: [created]
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Converter version (e.g., 0.2.0)'
+        required: false
+        default: '0.2.0'
+        type: string
 
 jobs:
   build:
@@ -118,8 +122,7 @@ jobs:
         asset_name: converter-${{ runner.os }}-${{ matrix.executable_name }}
         asset_content_type: application/octet-stream
 
-  create-combined-release:
-    if: github.event_name == 'release'
+create-combined-release:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -157,9 +160,35 @@ jobs:
         cd ..
         ls -la *.zip *.tar.gz 2>/dev/null || echo "No archives created"
 
-    - name: Upload combined archives to release
+    - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: conv${{ github.event.inputs.version || '0.2.0' }}
+        name: OptiArk Converter v${{ github.event.inputs.version || '0.2.0' }}
+        body: |
+          # OptiArk Converter v${{ github.event.inputs.version || '0.2.0' }}
+          
+          Convert MultiMC/Prism Launcher instances to Modrinth MRPack format.
+          
+          ## Downloads
+          - **Windows**: `converter-windows.zip`
+          - **Linux**: `converter-linux.tar.gz`
+          - **macOS**: `converter-macos.tar.gz`
+          - **All Platforms**: `converter-all-platforms.zip`
+          
+          ## Installation
+          1. Download the appropriate file for your platform
+          2. Extract the archive
+          3. Run the converter executable
+          
+          ## Usage
+          - **GUI Mode**: Simply run the executable and drag your .zip file
+          - **CLI Mode**: `./converter --input pack.zip --output pack.mrpack --headless`
+          
+          ---
+          Built from commit ${{ github.sha }}
+        draft: false
+        prerelease: false
         files: |
           converter-windows.zip
           converter-linux.tar.gz
