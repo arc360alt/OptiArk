@@ -1,4 +1,4 @@
-name: Build MultiMC MRPack Converter
+name: Build MultiMC MRPack Converter (actual)
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
         include:
           - os: windows-latest
             executable_name: converter.exe
-            build_command: pyinstaller --onefile --windowed --add-data "mmcpackconverter/arrow.png;." --icon=mmcpackconverter/arrow.png --name converter mmcpackconverter/converter.py
+            build_command: pyinstaller --onefile --windowed --add-data "mmcpackconverter/arrow.png;." --name converter mmcpackconverter/converter.py
           - os: ubuntu-latest
             executable_name: converter
             build_command: pyinstaller --onefile --add-data "mmcpackconverter/arrow.png:." --name converter mmcpackconverter/converter.py
