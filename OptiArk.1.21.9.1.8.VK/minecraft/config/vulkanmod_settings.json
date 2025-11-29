@@ -12,7 +12,7 @@
   "entityCulling": true,
   "device": 0,
   "ambientOcclusion": 0,
-  "frameQueueSize": 5,
+  "frameQueueSize": 2,
   "builderThreads": 15,
   "backFaceCulling": true,
   "textureAnimations": true
