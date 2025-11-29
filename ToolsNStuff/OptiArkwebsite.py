@@ -108,6 +108,12 @@ def format_releases(repo_owner, repo_name):
             if mc_version in ["1.21.4", "1.20.1"] and renderer in ["Sodium", "Nividium"]:
                 version_key = f"{mc_version} (Unsupported)"
             
+            # Append suffix for VulkanMod and Nividium
+            if renderer == "VulkanMod":
+                version_key = f"{version_key}VK"
+            elif renderer == "Nividium":
+                version_key = f"{version_key}NV"
+            
             organized_data[renderer][version_key] = url
     
     # Add the static Embeddium and Old categories
@@ -135,7 +141,20 @@ def format_releases(repo_owner, repo_name):
             print(f'    "{renderer}": {{')
             
             versions = organized_data[renderer]
-            version_items = list(versions.items())
+            
+            # Sort versions: put 1.21.10 at the end
+            def version_sort_key(item):
+                version = item[0]
+                # Extract the base version number (remove suffixes like VK, NV, (Unsupported))
+                base_version = version.split()[0].rstrip('VKNV')
+                # If it's 1.21.10, return a high value to sort it last
+                if base_version.startswith("1.21.10"):
+                    return (999, base_version)
+                # Otherwise, sort normally (reverse to put higher versions first)
+                version_parts = base_version.split('.')
+                return (0, tuple(int(p) for p in version_parts))
+            
+            version_items = sorted(versions.items(), key=version_sort_key, reverse=True)
             
             for j, (version, url) in enumerate(version_items):
                 comma = "," if j < len(version_items) - 1 else ""
