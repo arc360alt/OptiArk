@@ -1,0 +1,16 @@
+filename = 'WI-Zoom-1.7-MC1.21.11.jar'
+name = 'WI Zoom'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '10ec6f7a1f7f3fc95ef09a63dc8d100c3198991cdfa4b2ba5194157ab1e1721c5747f2986087ae24d7d794b25db4202f7235fdc82d5f089d0cf76d3c2b2d6040'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/o7DitHWP/versions/8TffgKNp/WI-Zoom-1.7-MC1.21.11.jar'
+
+[update.modrinth]
+mod-id = 'o7DitHWP'
+version = '8TffgKNp'

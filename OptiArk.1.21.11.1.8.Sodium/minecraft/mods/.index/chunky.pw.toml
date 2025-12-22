@@ -1,0 +1,16 @@
+filename = 'Chunky-Fabric-1.4.54.jar'
+name = 'Chunky'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = 'bf15fdb0c0e204c294766c6b92f0dc89d96e94ce4f70b98ac42eaa46b87802af56cfeb6548778f4945b1fdc2fe561a25477f711937dbf390e20b94c1bd006cae'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/fALzjamp/versions/bk9YUabA/Chunky-Fabric-1.4.54.jar'
+
+[update.modrinth]
+mod-id = 'fALzjamp'
+version = 'bk9YUabA'

@@ -1,0 +1,27 @@
+filename = 'modmenu-17.0.0-alpha.1.jar'
+name = 'Mod Menu'
+side = 'both'
+x-prismlauncher-loaders = [ 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [
+    '1.21.11',
+    '1.21.11 Pre-Release 1',
+    '1.21.11 Pre-Release 2',
+    '1.21.11 Pre-Release 3',
+    '1.21.11 Pre-Release 4',
+    '1.21.11 Pre-Release 5',
+    '1.21.11 rc1',
+    '1.21.11 rc2',
+    '1.21.11 rc3',
+    '25w46a'
+]
+x-prismlauncher-release-type = 'alpha'
+
+[download]
+hash = 'ef300ec938a688a52e95bafff3edc673ffee4af67273483a81b155f30ac9a4c4ca40e7ee96e27a35b4bb00a55b1ee4bd52f6d8efa69ba77417e569d0349ab562'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/mOgUt4GM/versions/fP9olSIC/modmenu-17.0.0-alpha.1.jar'
+
+[update.modrinth]
+mod-id = 'mOgUt4GM'
+version = 'fP9olSIC'
