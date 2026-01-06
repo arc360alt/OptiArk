@@ -1,0 +1,16 @@
+filename = 'VulkanMod_1.21.11-0.5.8.jar'
+name = 'VulkanMod'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'beta'
+
+[download]
+hash = '6e2bee5cb1957cc4b37e0c31833c439af59ddc5e963f1acf09519f4bc8488a51459e5fd8d3f592e464fc04b974278d40d4f9ee6f6bc7a43b736f0e2fc503e215'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/JYQhtZtO/versions/UOlHod70/VulkanMod_1.21.11-0.5.8.jar'
+
+[update.modrinth]
+mod-id = 'JYQhtZtO'
+version = 'UOlHod70'

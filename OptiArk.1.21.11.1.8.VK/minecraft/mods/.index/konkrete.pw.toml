@@ -1,0 +1,16 @@
+filename = 'konkrete_fabric_1.9.14_MC_1.21.11.jar'
+name = 'Konkrete'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '6ccbefb88f3fb084099504fb70559b53da267d0e67f96f964925472f5da477c1402d3cc7368a922c8aa6b7387baccf6908830444a40314c8760ef1964a7638f7'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/J81TRJWm/versions/59cbfF2f/konkrete_fabric_1.9.14_MC_1.21.11.jar'
+
+[update.modrinth]
+mod-id = 'J81TRJWm'
+version = '59cbfF2f'

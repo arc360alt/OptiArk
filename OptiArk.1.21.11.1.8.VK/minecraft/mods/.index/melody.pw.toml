@@ -1,0 +1,16 @@
+filename = 'melody_fabric_1.0.15_MC_1.21.11.jar'
+name = 'Melody'
+side = 'both'
+x-prismlauncher-loaders = [ 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '9a9ed54077daec16ea4ac6000cf40264d5bdaf97f0cc7b718d5062d538f0a09373bacedc276f43fe7ee4a9c14b4af7909a32b36c10d1b180d36f35b8a24a2a23'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/CVT4pFB2/versions/Xo1GAiPu/melody_fabric_1.0.15_MC_1.21.11.jar'
+
+[update.modrinth]
+mod-id = 'CVT4pFB2'
+version = 'Xo1GAiPu'

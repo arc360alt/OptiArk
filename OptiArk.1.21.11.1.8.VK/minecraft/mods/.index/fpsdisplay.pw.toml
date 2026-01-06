@@ -1,0 +1,16 @@
+filename = 'fpsdisplay-4.5.1+1.21.11.jar'
+name = 'FPS-Display'
+side = 'both'
+x-prismlauncher-loaders = [ 'quilt', 'fabric' ]
+x-prismlauncher-mc-versions = [ '1.21.11' ]
+x-prismlauncher-release-type = 'release'
+
+[download]
+hash = '63588328ba12d07bf8a9bf56d09cfe9837bbfc250a08b1b3249f09d05572bca229513ad922fdfb5c1e4137f5ef1606934325d66dc9469512eb6f9b2d34bdc4af'
+hash-format = 'sha512'
+mode = 'url'
+url = 'https://cdn.modrinth.com/data/DIlqwRFH/versions/Tiz1VFDa/fpsdisplay-4.5.1%2B1.21.11.jar'
+
+[update.modrinth]
+mod-id = 'DIlqwRFH'
+version = 'Tiz1VFDa'
